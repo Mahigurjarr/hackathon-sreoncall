@@ -20,6 +20,10 @@
 // Requires below are relative to this file's own location (__dirname), so this CLI resolves
 // store/state.json correctly no matter what directory it's invoked from.
 
+// Load .env before anything reads process.env. Non-destructive (see src/env.js): inside
+// Docker the environment is already populated by compose's env_file and this is a no-op.
+require("../src/env").loadEnv();
+
 const { load } = require("../src/store/state");
 const { Ledger } = require("../src/evidence/ledger");
 

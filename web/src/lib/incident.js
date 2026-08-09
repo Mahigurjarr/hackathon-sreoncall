@@ -45,6 +45,16 @@ export function headlineOf(inc) {
   return `${serviceOf(inc)} — ${inc.status || "open"}`;
 }
 
+// The model is asked to open its RCA with a headline block, and daemon.js stores that lead
+// verbatim. It sometimes prefixes it with its own "Headline:" label and a stray dash, which
+// is scaffolding from the prompt format rather than content — strip it everywhere a headline
+// is rendered, so no surface shows the seam.
+export function leadOf(inc) {
+  return String(headlineOf(inc))
+    .replace(/^\s*-?\s*Headline:?\s*-?\s*/i, "")
+    .trim();
+}
+
 export function timelineOf(inc) {
   const unified = firstArray(inc, ["timeline", "hypotheses"]);
   const hypothesisEvents = (unified.length ? unified : inc.revisions || []).map((e) => ({ ...e, kind: "hypothesis" }));

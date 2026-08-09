@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getState } from "@/lib/api";
 
 // Polls the backend on an interval so the dashboard reflects the daemon's own
@@ -36,5 +36,17 @@ export function useSreState(pollMs = 5000) {
     };
   }, [pollMs]);
 
-  return { state, error, loading: state === null && error === null };
+  // Pulls once, immediately. An approve/revise/reject changes state on the backend the
+  // instant it returns; waiting out the poll interval would make the UI look like it
+  // ignored the click.
+  const refresh = useCallback(async () => {
+    const next = await getState();
+    if (mounted.current) {
+      setState(next);
+      setError(null);
+    }
+    return next;
+  }, []);
+
+  return { state, error, loading: state === null && error === null, refresh };
 }

@@ -21,7 +21,7 @@ export function CapabilitiesPanel({ installs }) {
   }, [installs]);
 
   if (!installs.length) {
-    return <p className="p-4 text-sm text-muted-text">No capabilities installed yet.</p>;
+    return <p className="p-4 t-body text-muted-text">No capabilities installed yet.</p>;
   }
 
   return (
@@ -29,18 +29,18 @@ export function CapabilitiesPanel({ installs }) {
       <div className="flex flex-col gap-2 p-4">
         {byService.map(([service, records]) => (
           <details key={service} className="group rounded-md border border-border bg-surface p-3">
-            <summary className="flex cursor-pointer items-center gap-2 text-sm [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer items-center gap-2 t-body [&::-webkit-details-marker]:hidden">
               <span className="font-mono text-foreground">{service}</span>
-              <span className="text-xs text-muted-text">{records.length} capabilit{records.length === 1 ? "y" : "ies"}</span>
+              <span className="t-label text-muted-text">{records.length} capabilit{records.length === 1 ? "y" : "ies"}</span>
               <span className="ml-auto text-muted-text-2 transition-transform group-open:rotate-90">›</span>
             </summary>
             <div className="mt-2 flex flex-col gap-2 border-t border-border pt-2">
               {records.map((rec, i) => (
                 <div key={i} className="flex flex-col gap-1">
-                  <Badge variant="secondary" className="w-fit font-mono text-[10px]">
+                  <Badge variant="secondary" className="w-fit font-mono t-micro">
                     {rec.capability}
                   </Badge>
-                  <CitedText text={rec.reasoning} onCite={setCitedId} className="text-xs text-muted-text" />
+                  <CitedText text={rec.reasoning} onCite={setCitedId} className="t-label text-muted-text" />
                 </div>
               ))}
             </div>

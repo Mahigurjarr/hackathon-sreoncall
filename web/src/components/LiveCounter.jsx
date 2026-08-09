@@ -23,10 +23,13 @@ export function LiveCounter({ value, label }) {
     prev.current = value;
   }, [value]);
 
+  // Demoted to metadata weight (sreoncall-ui law 1): these are context, not the thing that
+  // needs a decision. Number and label sit on one baseline so four of them read as a single
+  // quiet strip rather than four competing stat tiles.
   return (
-    <div className="flex flex-col">
-      <span ref={ref} className="font-mono text-sm text-foreground">{value}</span>
-      <span className="text-[10px] uppercase tracking-wide text-muted-text-2">{label}</span>
+    <div className="flex items-baseline gap-1.5">
+      <span ref={ref} className="t-label font-mono text-muted-text">{value}</span>
+      <span className="t-micro text-muted-text-2">{label}</span>
     </div>
   );
 }

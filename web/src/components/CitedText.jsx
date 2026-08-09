@@ -8,13 +8,13 @@ export function CitedText({ text, onCite, className = "" }) {
   const parts = splitCitations(text);
 
   return (
-    <p className={`whitespace-pre-wrap text-sm leading-relaxed text-foreground ${className}`}>
+    <p className={`whitespace-pre-wrap t-body leading-relaxed text-foreground ${className}`}>
       {parts.map((part, i) =>
         part.citation ? (
           <button
             key={i}
             onClick={() => onCite(part.citation)}
-            className="mx-0.5 rounded bg-signal-dim px-1 font-mono text-[11px] font-medium text-signal hover:bg-signal/25"
+            className="mx-0.5 rounded bg-signal-dim px-1 font-mono t-label font-medium text-signal hover:bg-signal/25"
           >
             {part.citation}
           </button>

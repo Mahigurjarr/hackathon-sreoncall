@@ -24,7 +24,7 @@ export function EvidenceSheet({ id, onClose }) {
         <SheetHeader>
           <SheetTitle className="font-mono text-signal">{id}</SheetTitle>
         </SheetHeader>
-        <div className="flex flex-col gap-3 px-4 pb-6 text-sm">
+        <div className="flex flex-col gap-3 px-4 pb-6 t-body">
           {error && <p className="text-severity-critical">Could not load {id}: {error}</p>}
           {!entry && !error && (
             <div className="flex flex-col gap-2">
@@ -34,26 +34,26 @@ export function EvidenceSheet({ id, onClose }) {
           )}
           {entry && (
             <>
-              <div className="flex items-center gap-2 text-xs text-muted-text">
+              <div className="flex items-center gap-2 t-label text-muted-text">
                 <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono uppercase">{entry.kind}</span>
                 <span>{new Date(entry.at).toLocaleString()}</span>
               </div>
-              {entry.target && <p className="text-xs text-muted-text">target: {entry.target}</p>}
+              {entry.target && <p className="t-label text-muted-text">target: {entry.target}</p>}
               <div>
-                <p className="mb-1 text-xs font-medium text-muted-text">Query</p>
-                <pre className="overflow-x-auto rounded-md border border-border bg-surface-2 p-3 font-mono text-xs text-foreground whitespace-pre-wrap">
+                <p className="mb-1 t-label font-medium text-muted-text">Query</p>
+                <pre className="overflow-x-auto rounded-md border border-border bg-surface-2 p-3 font-mono t-label text-foreground whitespace-pre-wrap">
                   {entry.query}
                 </pre>
               </div>
               {entry.summary && (
                 <div>
-                  <p className="mb-1 text-xs font-medium text-muted-text">Summary</p>
-                  <p className="text-sm">{entry.summary}</p>
+                  <p className="mb-1 t-label font-medium text-muted-text">Summary</p>
+                  <p className="t-body">{entry.summary}</p>
                 </div>
               )}
               <div>
-                <p className="mb-1 text-xs font-medium text-muted-text">Raw response</p>
-                <pre className="max-h-[420px] overflow-auto rounded-md border border-border bg-surface-2 p-3 font-mono text-[11px] text-foreground">
+                <p className="mb-1 t-label font-medium text-muted-text">Raw response</p>
+                <pre className="max-h-[420px] overflow-auto rounded-md border border-border bg-surface-2 p-3 font-mono t-label text-foreground">
                   {JSON.stringify(entry.raw, null, 2)}
                 </pre>
               </div>

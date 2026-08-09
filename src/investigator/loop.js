@@ -16,6 +16,7 @@
 
 const { chat, runToolLoop, MODELS } = require("../llm/client");
 const { Ledger } = require("../evidence/ledger");
+const { practicesBlock } = require("../practices");
 const tools = require("./tools");
 
 // ---- System prompt ------------------------------------------------------------------------
@@ -129,6 +130,15 @@ When you're done, write your final message as the root-cause analysis, structure
 Lead with the headline; the rest is detail available on demand, not a wall of raw data
 dumped up front.
 `.trim();
+
+// The prompt the model actually receives: the reasoning discipline above, plus the team's
+// own procedure and guardrails read off disk at call time (src/practices.js). Kept as a
+// function rather than a constant so an edit to sre-as-code/practices/*.md takes effect on
+// the next investigation, not the next restart of a long-lived daemon.
+function systemPrompt() {
+  const practices = practicesBlock();
+  return practices ? `${SYSTEM_PROMPT}\n\n---\n\n${practices}` : SYSTEM_PROMPT;
+}
 
 // ---- Hypothesis parsing --------------------------------------------------------------------
 // The model's own tagged lines ARE the hypothesis_history — we don't infer or paraphrase,
@@ -247,9 +257,13 @@ async function investigate({ trigger, frame = null, ledger = null, state = null,
 
   const messages = [{ role: "user", content: buildInitialMessage(trigger, frame) }];
 
+  // Resolved once per investigation so every turn of this loop — including the forced final
+  // turn below — reasons against the identical procedure.
+  const system = systemPrompt();
+
   const loopResult = await runToolLoop({
     model,
-    system: SYSTEM_PROMPT,
+    system,
     messages,
     tools: toolDefs,
     handlers,
@@ -265,7 +279,7 @@ async function investigate({ trigger, frame = null, ledger = null, state = null,
   if (loopResult.exhausted || !final_rca || !final_rca.trim()) {
     const forced = await chat({
       model,
-      system: SYSTEM_PROMPT,
+      system,
       messages: [
         ...loopResult.messages,
         {
@@ -299,7 +313,10 @@ async function investigate({ trigger, frame = null, ledger = null, state = null,
   };
 }
 
-module.exports = { investigate, buildHandlers, shapeToolResult, parseHypotheses, buildInitialMessage, SYSTEM_PROMPT };
+module.exports = {
+  investigate, buildHandlers, shapeToolResult, parseHypotheses, buildInitialMessage,
+  SYSTEM_PROMPT, systemPrompt,
+};
 
 // ---- CLI harness ----------------------------------------------------------------------------
 // node src/investigator/loop.js "<trigger text>"
