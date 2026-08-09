@@ -51,11 +51,24 @@ function summarizeCandidate(inc, proposals) {
       ? `proposed ${proposal.payload.files.length} file change(s) "${proposal.payload.title}" (status: ${proposal.status})`
       : "no remediation recorded";
 
+  // The outcome, not just the diagnosis — this is what turns recall from lookup into learning.
+  // A "confirmed" redemption means the mechanism AND the fix for it are trustworthy prior art;
+  // an "unresolved" one means the fix was tried and did NOT hold, which the model must weigh
+  // very differently even if the mechanism still looks identical (see SYSTEM_PROMPT below).
+  const redemption = !inc.redemption
+    ? "not yet verified"
+    : inc.redemption.status === "confirmed"
+      ? `CONFIRMED recovered (${inc.redemption.confidence} confidence) — the fix held`
+      : inc.redemption.status === "unresolved"
+        ? `UNRESOLVED — re-checked after the fix and the symptom was STILL PRESENT (${String(inc.redemption.reason || "").slice(0, 200)})`
+        : "verification pending";
+
   return [
     `### ${inc.id} — service: ${inc.service} — confidence: ${inc.confidence} — opened ${inc.openedAt}`,
     `Headline: ${inc.headline}`,
     `Diagnosis: ${String(inc.rca).slice(0, 1200)}`,
     `Remediation: ${remediation}`,
+    `Outcome (verified after the fact): ${redemption}`,
   ].join("\n");
 }
 
@@ -85,6 +98,20 @@ shared service name is weak evidence; a shared causal mechanism is strong eviden
 
 Be conservative. When the trigger text is too thin to tell the difference between two prior
 mechanisms, answer "related" or "novel", never "reuse".
+
+## Learn from outcomes, not just diagnoses
+
+Each candidate below shows its verified "Outcome" — whether a redemption check ran after the
+fix and found the symptom actually cleared, or found it did NOT. Treat this as real signal:
+
+- A candidate marked CONFIRMED recovered is trustworthy prior art. Its mechanism AND its fix
+  both held up under a later, independent check — reuse is well justified.
+- A candidate marked UNRESOLVED already told you its fix did not work. Even if the mechanism
+  looks identical, do not answer "reuse" for it — the agent already tried that answer once and
+  it failed. Prefer "related" (investigate fresh, informed by what didn't work) so the new
+  investigation isn't primed to repeat the same mistake.
+- "not yet verified" or "verification pending" candidates are ordinary prior art — reason
+  about them exactly as before, without extra weight either way.
 `.trim();
 
 const TOOLS = [
@@ -210,9 +237,21 @@ function priorArtBlock(recallResult) {
       : "A previous incident is related but is NOT the same failure. Use it for orientation only; " +
         "investigate this trigger on its own terms.";
 
+  // If the prior fix is already known to have failed, the investigator needs to hear that
+  // explicitly — the recall verdict alone (e.g. "related") doesn't carry WHY it's only related
+  // rather than reused, and "the last attempt at this didn't work" changes what's worth trying.
+  const outcomeNote =
+    prior.redemption?.status === "unresolved"
+      ? `\nIMPORTANT: a fix for this exact prior incident was already tried and a later check ` +
+        `found the symptom did NOT clear (${String(prior.redemption.reason || "").slice(0, 300)}). ` +
+        `Do not propose the same remediation again without new evidence explaining why it would work now.`
+      : prior.redemption?.status === "confirmed"
+        ? `\nThe prior incident's fix was independently confirmed to have worked.`
+        : "";
+
   return [
     `## Prior art — ${prior.id} (${recallResult.verdict}${recallResult.mechanism ? `: ${recallResult.mechanism}` : ""})`,
-    stance,
+    stance + outcomeNote,
     "",
     `Previously concluded: ${prior.headline}`,
     "",

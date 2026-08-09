@@ -20,10 +20,33 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { chat, MODELS } = require("../llm/client");
+const { runDecisionLoop, MODELS } = require("../llm/client");
 const { Ledger } = require("../evidence/ledger");
 const { practicesBlock } = require("../practices");
 const { draftProposal } = require("./proposals");
+const tools = require("../investigator/tools");
+
+// Evidence-gathering turns before the author must decide. Small on purpose: this runs after
+// a full investigation already happened, so the remaining work is usually one or two targeted
+// queries (typically derive_baseline for an alert rule) — not a fresh search.
+const MAX_AUTHOR_TURNS = 6;
+
+function evidenceHandlers(ledger) {
+  return {
+    query_metrics: (a) => tools.query_metrics(a.promql, ledger).then(shapeForModel),
+    compare_baseline: (a) => tools.compare_baseline(a.promql, a.minutes, ledger).then(shapeForModel),
+    derive_baseline: (a) => tools.derive_baseline(a.promql, a.lookbackHours, ledger).then(shapeForModel),
+  };
+}
+
+// Keep only what the author needs back — id (to cite) and summary/stats — never the raw
+// response; that stays in the ledger for a human to audit, not in the model's context window.
+function shapeForModel(result) {
+  return { id: result.id, summary: result.summary, ...(result.stats ? { stats: result.stats } : {}) };
+}
+
+const EVIDENCE_TOOL_NAMES = new Set(["query_metrics", "compare_baseline", "derive_baseline"]);
+const EVIDENCE_TOOLS = tools.toToolDefinitions().filter((t) => EVIDENCE_TOOL_NAMES.has(t.function.name));
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const SRE_AS_CODE = path.join(REPO_ROOT, "sre-as-code");
@@ -94,6 +117,15 @@ concluded with a cited root-cause analysis. Your job is to decide whether that c
 justifies a concrete change to the team's SRE-as-code repository, and if so, to write that
 change in full.
 
+## Gathering evidence before you decide
+
+You have query_metrics, compare_baseline, and derive_baseline available. Use them when the
+fix you're considering is an alert rule — an alert rule with a real threshold-shaped condition
+must be backed by derive_baseline's actual computed mean/stddev/percentiles from real history,
+never a number you picked. If the RCA's own citations already establish the mechanism clearly
+enough that no new query is needed, decide immediately — these tools exist to let you compute
+a real number when a rule needs one, not to pad out every decision with busywork.
+
 ## What you are allowed to change
 
 ONLY these paths:
@@ -133,9 +165,13 @@ than a redundant runbook.
   real evidence id it rests on, e.g. [E7], taken from the cited evidence you were given.
 - Never invent an evidence id. If you weren't handed it, you cannot cite it.
 - Match the existing files' style exactly: the alert rules carry a \`rationale:\` block
-  explaining why that metric family and not another, and they deliberately encode NO numeric
-  threshold — whether a reading is anomalous is a live judgement the investigating agent
-  makes against a baseline. Preserve that convention; do not add a static threshold.
+  explaining why that metric family and not another, and they deliberately encode NO static
+  numeric threshold — whether a reading is anomalous is a live judgement the investigating
+  agent makes against a baseline. Preserve that convention.
+- If the rule's PromQL needs a comparison at all, express it against the query's OWN history
+  (an \`offset\` comparison, or a derive_baseline-computed mean/stddev/percentile you actually
+  called for and cite by [E#]) — never a bare literal number pulled from nowhere. A number in
+  a rule with no [E#] beside it is a hardcoded threshold wearing a rationale as camouflage.
 
 ## PR body format
 
@@ -230,12 +266,21 @@ function buildUserMessage(incident, evidence, inventory) {
   ].join("\n");
 }
 
+// Every evidence-gathering call the author makes goes through this ledger, so a derived
+// baseline gets a real [E#] id the PR body can cite — the same ledger the investigation used,
+// so ids keep counting up rather than colliding with the RCA's own [E#]s.
+function newlyGatheredIds(gathered) {
+  return gathered.map((g) => g.result?.id).filter(Boolean);
+}
+
 /**
- * Asks the model to author a remediation for `incident`. Returns either
+ * Asks the model to author a remediation for `incident`. It may call query_metrics /
+ * compare_baseline / derive_baseline first to gather real evidence (typically a historical
+ * baseline for an alert rule) before deciding. Returns either
  * `{ kind: 'github_pr', proposal }` (a draft recorded in state.proposals, awaiting approval)
  * or `{ kind: 'no_code_fix', reason }`.
  *
- * Throws if the model returns neither tool call — an unparseable answer must surface rather
+ * Throws if the model never reaches a decision — an unparseable answer must surface rather
  * than silently become "no fix needed", which would look identical to a considered decline.
  */
 async function draftRemediation(incident, { ledger = null, model = MODELS.deep } = {}) {
@@ -245,27 +290,21 @@ async function draftRemediation(incident, { ledger = null, model = MODELS.deep }
   const evidence = citedEvidenceFor(incident, activeLedger);
   const inventory = readSreAsCodeInventory();
 
-  const reply = await chat({
+  const { call, gathered } = await runDecisionLoop({
     model,
     system: systemPrompt(),
     messages: [{ role: "user", content: buildUserMessage(incident, evidence, inventory) }],
-    tools: TOOLS,
-    toolChoice: "required",
+    tools: [...EVIDENCE_TOOLS, ...TOOLS],
+    handlers: evidenceHandlers(activeLedger),
+    terminalTools: ["propose_fix", "no_code_fix"],
+    maxTurns: MAX_AUTHOR_TURNS,
   });
 
-  const call = reply.toolCalls[0];
-  if (!call) {
-    throw new Error(
-      `draftRemediation(${incident.id}): model returned no tool call — cannot tell a considered decline from a broken response`
-    );
-  }
+  const allEvidenceIds = [...new Set([...evidence.map((e) => e.id), ...newlyGatheredIds(gathered)])];
 
   if (call.name === "no_code_fix") {
+    validateCitations(`draftRemediation(${incident.id})`, activeLedger, call.args.reason);
     return { kind: "no_code_fix", reason: call.args.reason || "(no reason given)", incidentId: incident.id };
-  }
-
-  if (call.name !== "propose_fix") {
-    throw new Error(`draftRemediation(${incident.id}): unexpected tool call '${call.name}'`);
   }
 
   const { title, branchSlug, summary, body, files } = call.args;
@@ -284,6 +323,8 @@ async function draftRemediation(incident, { ledger = null, model = MODELS.deep }
     );
   }
 
+  validateCitations(`draftRemediation(${incident.id})`, activeLedger, body);
+
   const slug = String(branchSlug || "fix").replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   const branchName = `agent/${incident.id.toLowerCase()}-${slug}`.slice(0, 200);
 
@@ -301,11 +342,22 @@ async function draftRemediation(incident, { ledger = null, model = MODELS.deep }
         content: f.content,
         message: f.message || `${title} (${incident.id})`,
       })),
-      citedEvidence: evidence.map((e) => e.id),
+      citedEvidence: allEvidenceIds,
     },
   });
 
   return { kind: "github_pr", proposal };
+}
+
+// Same standard as investigate()'s own final RCA: an invented citation must surface, never
+// reach a reviewer disguised as a real one. Warns rather than throws — the same tolerance
+// loop.js uses, since the proposal itself is still reviewable even if one clause is unbacked.
+function validateCitations(label, ledger, text) {
+  const { unresolved } = ledger.validate(text || "");
+  if (unresolved.length) {
+    // eslint-disable-next-line no-console
+    console.warn(`${label}: unresolved citations: ${unresolved.join(", ")}`);
+  }
 }
 
 /**
@@ -355,16 +407,16 @@ async function reviseRemediation(proposal, feedback, { model = MODELS.deep } = {
     "repo change was the wrong response after all. Do not simply restate your previous draft.",
   ].join("\n");
 
-  const reply = await chat({
+  const { call, gathered } = await runDecisionLoop({
     model,
     system: systemPrompt(),
     messages: [{ role: "user", content: userMessage }],
-    tools: TOOLS,
-    toolChoice: "required",
+    tools: [...EVIDENCE_TOOLS, ...TOOLS],
+    handlers: evidenceHandlers(ledger),
+    terminalTools: ["propose_fix", "no_code_fix"],
+    maxTurns: MAX_AUTHOR_TURNS,
   });
-
-  const call = reply.toolCalls[0];
-  if (!call) throw new Error(`reviseRemediation(${proposal.id}): model returned no tool call`);
+  const newIds = newlyGatheredIds(gathered);
 
   const { update } = require("../store/state");
   let updated;
@@ -401,6 +453,7 @@ async function reviseRemediation(proposal, feedback, { model = MODELS.deep } = {
           content: f.content,
           message: f.message || `${title} (${incidentId})`,
         })),
+        citedEvidence: [...new Set([...(p.payload.citedEvidence || []), ...newIds])],
       };
     }
     updated = p;

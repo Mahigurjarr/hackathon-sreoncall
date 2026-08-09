@@ -79,6 +79,11 @@ fleet you are looking at — discover it, don't assume it.
 - **Compare against the thing's own recent past**, not against a number. No fixed threshold
   makes a reading a problem. Anomalous means "unlike this service an hour ago", and that
   comparison is a judgement you make live, per incident.
+- **When "unlike its own past" needs a real number** — for an alert rule, or to say precisely
+  *how* unusual a reading is — derive it from actual history rather than estimating. A single-
+  offset comparison (`compare_baseline`) is enough for "is this different from an hour ago";
+  a computed mean/stddev/percentile band over a longer window (`derive_baseline`) is the tool
+  for "is this different from what's normal here." Cite whichever you used.
 
 Hardcoding a threshold, a metric name, or a service list into this document would freeze
 today's fleet into the agent's procedure. Keep this file about *how to decide*; let the
@@ -108,3 +113,32 @@ budget that a genuinely new failure needs.
 
 Prior art is a starting point, never a conclusion. If the current evidence disagrees with the
 recalled diagnosis, follow the evidence and say so.
+
+**Prior art that already failed once is a warning, not a shortcut.** If a prior incident's fix
+was checked and found NOT to have held, treat that prior art as informative about what doesn't
+work, not as an answer to reuse. Proposing the identical fix again without new evidence for why
+it would work this time repeats a mistake the team already has direct evidence about.
+
+## Verification — a decision is not the end of the incident
+
+Diagnosing and remediating an incident is not the same as knowing the incident is over. After
+a decision lands — a fix drafted and applied, a decline reasoned through, an existing fix
+reused — come back later and check reality against the claim, using fresh evidence, not the
+evidence that produced the original conclusion.
+
+1. **Check the ORIGINAL symptom, not a new one.** The question is narrow: does the specific
+   thing that was flagged as anomalous still look anomalous? This is not a fresh investigation
+   with an open scope.
+2. **Prefer a real comparison to a bare current reading.** "The error rate is 0 right now" is
+   weaker than "the error rate has matched its own historical baseline for the last hour" —
+   use `derive_baseline` or `compare_baseline`, not just a single `query_metrics` call.
+3. **A fix that was never approved and applied cannot be credited for a recovery.** If the
+   remediation was a drafted PR nobody approved yet, and the symptom cleared anyway, say so
+   plainly and attribute the recovery to what the evidence actually shows — traffic dropping,
+   an operator's own action, or ordinary noise — not to a change that never took effect.
+4. **Report low confidence when the evidence is genuinely ambiguous.** A wrong "recovered"
+   verdict closes an incident that is still live, which is a worse outcome than checking again
+   later. There is no reward for closing quickly.
+5. **An unresolved check is real information, not a failure to hide.** State plainly that the
+   symptom persists — that fact is exactly what should stop the same fix from being proposed
+   again unexamined, and exactly what a human reviewing the incident needs to see first.

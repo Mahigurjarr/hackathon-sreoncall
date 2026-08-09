@@ -174,6 +174,47 @@ function summarizeTraceSearch(query, results) {
   return `${results.length} trace(s) matched "${query}": ${bits.join(" | ")}${more}`;
 }
 
+// Real statistics over real historical data — mean/stddev/percentiles computed from whatever
+// queryMetricRange actually returned. No number in this function is a business threshold; it
+// is arithmetic over live points. The caller (a model deciding on an alert rule or judging a
+// current reading) chooses how to combine these into a condition — this function only ever
+// hands back what history actually shows.
+function computeSeriesStats(raw) {
+  const rows = raw?.data?.result || [];
+  if (raw?.data?.resultType !== "matrix" || !rows.length) {
+    return { ok: false, seriesCount: 0 };
+  }
+
+  const series = rows.map((r) => {
+    const label = r.metric.service_name || Object.values(r.metric)[0] || "?";
+    const values = (r.values || []).map((v) => Number(v[1])).filter((n) => !Number.isNaN(n));
+    if (!values.length) return { label, count: 0 };
+
+    const sorted = [...values].sort((a, b) => a - b);
+    const pct = (p) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+    const mean = values.reduce((s, v) => s + v, 0) / values.length;
+    const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+
+    return {
+      label, count: values.length, mean, stddev: Math.sqrt(variance),
+      min: sorted[0], max: sorted[sorted.length - 1],
+      p50: pct(0.5), p95: pct(0.95), p99: pct(0.99),
+    };
+  });
+
+  return { ok: true, seriesCount: series.length, series };
+}
+
+function summarizeBaseline(promql, hours, stats) {
+  if (!stats.ok) return `no historical data over the last ${hours}h for: ${promql}`;
+  const parts = stats.series.slice(0, 8).map((s) => {
+    if (!s.count) return `${s.label}: no points`;
+    return `${s.label}: mean=${s.mean.toPrecision(4)} stddev=${s.stddev.toPrecision(3)} p95=${s.p95.toPrecision(4)} (${s.count}pts)`;
+  });
+  const more = stats.series.length > 8 ? ` (+${stats.series.length - 8} more)` : "";
+  return `${stats.seriesCount} series over last ${hours}h: ${parts.join("; ")}${more}`;
+}
+
 // Attach a PromQL `offset` to every range-vector selector in the expression — the correct
 // position is right after the selector's closing bracket (`metric[5m] offset 30m`), which is
 // also the general case: every verified query in docs/TELEMETRY.md's vocabulary is of the
@@ -259,6 +300,15 @@ async function compare_baseline(promql, minutes, ledger) {
     summary,
   });
   return { id: entry.id, summary, raw: { now, baseline: past } };
+}
+
+async function derive_baseline(promql, lookbackHours, ledger) {
+  const hours = Number(lookbackHours) > 0 ? Number(lookbackHours) : 24;
+  const raw = await lgtm.queryMetricRange(promql, hours * 60);
+  const stats = computeSeriesStats(raw);
+  const summary = summarizeBaseline(promql, hours, stats);
+  const entry = ledger.record({ kind: "metric", query: `${promql} (${hours}h history)`, target: null, raw, summary });
+  return { id: entry.id, summary, raw, stats };
 }
 
 // ---- OpenAI-format tool definitions ---------------------------------------------------
@@ -400,6 +450,26 @@ function toToolDefinitions() {
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "derive_baseline",
+        description:
+          "Compute a REAL statistical baseline (mean, stddev, p50/p95/p99) for a PromQL " +
+          "expression from its actual last N hours of history. This is the only legitimate " +
+          "way to justify a number in an alert rule or a 'this is X times normal' claim — " +
+          "never invent a threshold; derive it from this. Absent-safe: says plainly when " +
+          "there isn't enough history rather than guessing.",
+        parameters: {
+          type: "object",
+          properties: {
+            promql: { type: "string", description: "PromQL expression to compute history for" },
+            lookbackHours: { type: "number", description: "Hours of history to pull (default 24)" },
+          },
+          required: ["promql"],
+        },
+      },
+    },
   ];
 }
 
@@ -410,5 +480,7 @@ module.exports = {
   search_traces_ql,
   get_trace,
   compare_baseline,
+  derive_baseline,
+  computeSeriesStats,
   toToolDefinitions,
 };

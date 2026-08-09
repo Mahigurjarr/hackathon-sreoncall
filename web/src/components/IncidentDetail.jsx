@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Brain } from "lucide-react";
+import { Brain, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -101,6 +101,23 @@ export function IncidentDetail({ incident, proposals = [], github, onRefresh }) 
                 full investigation
               </span>
             )}
+          </p>
+        )}
+
+        {/* Verification status — whether the decision on this incident (fix, decline, reuse)
+            was later confirmed to have actually held. See the Ownership tab for the cited
+            detail; this line is the at-a-glance version. */}
+        {incident.redemption && incident.redemption.status !== "pending" && (
+          <p className="mt-1.5 flex items-center gap-1.5 t-label">
+            {incident.redemption.status === "confirmed" ? (
+              <ShieldCheck className="size-3 text-severity-ok" />
+            ) : (
+              <ShieldAlert className="size-3 text-severity-critical" />
+            )}
+            <span className={incident.redemption.status === "confirmed" ? "font-medium text-severity-ok" : "font-medium text-severity-critical"}>
+              {incident.redemption.status === "confirmed" ? "Verified fixed" : "Still recurring after the fix"}
+            </span>
+            <span className="text-muted-text-2">— see Ownership tab</span>
           </p>
         )}
       </div>

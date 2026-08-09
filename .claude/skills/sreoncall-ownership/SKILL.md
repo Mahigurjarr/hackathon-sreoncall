@@ -1,18 +1,21 @@
 ---
 name: sreoncall-ownership
-description: How the agent takes ownership of an incident — the draft→approve→apply proposal state machine, the fail-closed path allowlist, the PR-authoring rules, and the review gate (approve / push back / reject). Use this skill whenever touching src/actions/ (remediation.js, proposals.js, github.js), whenever changing what the agent is allowed to propose or write, whenever adding a proposal status or a review action, whenever wiring anything that writes to GitHub, and whenever someone asks the agent to "fix", "remediate", "open a PR", or "act on" an incident. Read it before changing the action path, because the guarantees here are safety properties, not preferences.
+description: How the agent takes ownership of an incident, end to end — the evidence-gathering draft→approve→apply proposal state machine, the fail-closed path allowlist, the PR-authoring rules, the review gate (approve / push back / reject), AND the redemption check that closes the loop from "PR opened" to "confirmed resolved" with fresh cited evidence. Use this skill whenever touching src/actions/ (remediation.js, proposals.js, github.js, redemption.js), whenever changing what the agent is allowed to propose or write, whenever adding a proposal status or a review action, whenever wiring anything that writes to GitHub, and whenever someone asks the agent to "fix", "remediate", "open a PR", "close the loop", or "act on" an incident. Read it before changing the action path, because the guarantees here are safety properties, not preferences.
 ---
 
 # Ownership
 
 Ownership is the difference between an agent that produces a good paragraph and one that
-produces a reviewable change. The rule this subsystem exists to enforce:
+produces a reviewable change — and, past that, one that **finds out whether the change
+worked**. The rule this subsystem exists to enforce:
 
 > The agent decides **on its own** what to do. A human decides **whether it happens.**
-> Drafting is autonomous. Publishing is not.
+> Drafting is autonomous. Publishing is not. **And "PR opened" is not the end of the story —
+> the agent comes back and checks.**
 
-Everything below protects one of those two halves. Weakening either breaks the subsystem's
-whole claim.
+Everything below protects one of those three parts. Weakening any of them breaks the
+subsystem's whole claim. Stopping at "PR opened" without the last part is the single most
+common way an ownership pipeline looks complete and isn't — see "Closing the loop" below.
 
 ## The pipeline
 
@@ -20,10 +23,12 @@ whole claim.
 investigation concludes (cited RCA)
         │
         ▼
-draftRemediation()          ← the model decides IF a change is warranted, and writes it
+draftRemediation()          ← may call derive_baseline / compare_baseline / query_metrics
+        │                     first (an evidence-gathering DECISION LOOP, not one-shot), then
+        │                     decides IF a change is warranted, and writes it
         │
-        ├── no_code_fix ────────────► recorded on the incident, with the reason. Done.
-        │
+        ├── no_code_fix ────────────► recorded on the incident, with the reason.
+        │                             Still not "done" — see redemption below.
         ▼
 draftProposal()             ← status: "draft". Nothing has left this machine yet.
         │
@@ -41,12 +46,26 @@ approveProposal   reviseRemediation  status: "rejected"
 applyGithubPrProposal ──► branch → files → PR ──► status: "applied", url + number stored
         │
         └── on failure ──► status: "apply_failed", error stored. Never stuck on "approved".
+
+                                    ▼
+                    scheduleRedemption() — EVERY outcome above gets this, not just success
+                                    │  (wait SRE_REDEMPTION_DELAY_MS)
+                                    ▼
+                    verifyRecovery() — fresh evidence, NOT the original investigation's
+                                    │
+                          ┌─────────┼─────────┐
+                     confirmed   pending    unresolved
+                          │                     │
+                          ▼                     ▼
+              incident.status = "resolved"   stays open — feeds back into
+              (the actual closure)           sreoncall-memory's reuse guard
 ```
 
 Files: `src/actions/remediation.js` (authoring), `src/actions/proposals.js` (state machine),
-`src/actions/github.js` (REST client), `src/sentinel/daemon.js` (`attachRemediation` wires it
-into the running loop), `src/web/server.js` (review routes),
-`web/src/components/OwnershipPanel.jsx` (the gate).
+`src/actions/github.js` (REST client), `src/actions/redemption.js` (the closing step),
+`src/sentinel/daemon.js` (`attachRemediation` wires authoring in;
+`scheduleRedemption`/`runRedemptionChecks` wire verification in), `src/web/server.js` (review
+routes), `web/src/components/OwnershipPanel.jsx` (the gate and the verification card).
 
 ## The five guarantees
 
@@ -89,6 +108,50 @@ blinding itself, and the failure would be invisible precisely because it succeed
 
 This is the one rule with no exception. It is stated in
 `sre-as-code/practices/guardrails.md` §3 and enforced by guarantee 4.
+
+### 6. A number in a rule must trace to real evidence
+
+`draftRemediation()` runs as a `runDecisionLoop()` (`src/llm/client.js`), not a single `chat()`
+call — it may call `query_metrics` / `compare_baseline` / `derive_baseline` to gather real
+historical data before deciding, exactly as an investigation does. This exists so an authored
+alert rule's comparison is never a guessed number: `derive_baseline` computes mean/stddev/
+percentiles from actual history and returns a `[E#]` id the PR body must cite. See
+`sreoncall-alerting` for the full discipline this enforces.
+
+## Closing the loop — redemption
+
+Everything above stops at "a decision was made and possibly published." That is necessary but
+not sufficient for ownership: a PR being open doesn't mean it fixed anything, and a `no_code_fix`
+decline doesn't mean the decline was right. `src/actions/redemption.js` is the step that finds
+out.
+
+**Every remediation outcome gets scheduled for a check** — `scheduleRedemption()` runs
+unconditionally after `attachRemediation()`, regardless of whether the outcome was a drafted
+PR, a decline, a reuse, or even a failed drafting attempt. An unverified decline is exactly as
+risky as an unverified fix; both are claims about the world that haven't been checked yet.
+
+After a delay (long enough for a merged PR or an operator's flag flip to actually take
+effect), `verifyRecovery()` runs a short evidence-gathering pass against **fresh** telemetry —
+never the original investigation's evidence, since "it looked fixed an hour ago" isn't proof
+it's fixed now — and reaches one of three outcomes:
+
+- **`confirmed`** (recovered, non-low confidence) → `incident.status` becomes `"resolved"`,
+  with `resolvedBy: "redemption-check"` and the citing evidence attached. **This is the only
+  path that closes an incident.** Nothing else in the pipeline sets `status: "resolved"`.
+- **`unresolved`** (still broken) → stays open, and this outcome propagates into
+  `sreoncall-memory`'s reuse guard so the same known-bad fix doesn't get proposed again.
+- **`pending`** (recovered but only weakly) → re-checked later rather than closed on shaky
+  evidence. A false "confirmed" is worse than a late one.
+
+**Never skip this step to make the pipeline look "done" sooner.** A PR opened and never
+verified is a claim, not a result — and "the fix worked" is exactly the kind of claim this
+whole product is built to never assert without evidence behind it.
+
+Full detail (the delay constant, the confidence rule, the read-only guarantee, how it changes
+recall's behaviour) lives in `sreoncall-memory` — that skill owns the mechanism because
+redemption's real payoff is feeding the outcome back into future decisions, which is a memory
+concern as much as an ownership one. This skill owns the *closure* half: what happens to the
+incident's own status.
 
 ## Declining is a first-class outcome
 
@@ -159,11 +222,21 @@ Only `draft`/`revised` can be revised. Once a PR is open, revision belongs on th
 - [ ] `no_code_fix` still possible, with no generic-runbook fallback
 - [ ] Every terminal state recorded on the proposal — never stuck mid-transition
 - [ ] Every autonomous decision emits exactly one log line (`sreoncall-logs`)
+- [ ] A number in an authored alert rule still traces to a cited `derive_baseline`/
+      `compare_baseline` call — never a guessed literal
+- [ ] Every remediation outcome (drafted, declined, reused, failed) still gets
+      `scheduleRedemption()` called on it — not only successful PRs
+- [ ] `incident.status = "resolved"` is still set ONLY by a `confirmed` redemption check —
+      no other code path sets it
+- [ ] `verifyRecovery()` still runs against fresh evidence, never the original investigation's
 
 ## Related
 
-- [[sreoncall-memory]] — decides whether a fix needs authoring at all, or whether a prior
-  incident's proposal already covers this one
-- `sre-as-code/practices/guardrails.md` — the team-editable statement of guarantees 1–5,
+- [[sreoncall-memory]] — decides whether a fix needs authoring at all, whether a prior
+  incident's proposal already covers this one, and owns the redemption mechanism this skill's
+  pipeline diagram calls out
+- [[sreoncall-alerting]] — the discipline behind guarantee 6: what a cited, baseline-derived
+  alert-rule comparison actually looks like
+- `sre-as-code/practices/guardrails.md` — the team-editable statement of guarantees 1–6,
   loaded into the model's prompt on every reasoning step. Change both together, or the
   enforced behaviour and the stated policy drift apart.

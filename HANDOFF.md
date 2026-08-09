@@ -3,6 +3,33 @@
 Written so a fresh session can pick this up without re-deriving anything. Read this, then
 `CLAUDE.md` (the rules), then the skills in `.claude/skills/`.
 
+## Status right now — read this first
+
+- **Everything is committed and pushed.** `main` is at `afa5c17`, remote in sync.
+  - `9306599` — ownership + self-learning wired in, console redesign, container split
+  - `afa5c17` — the agent's runtime state (`store/state.json`)
+- **`store/state.json` will always show as modified.** The sentinel rewrites it every ~45s,
+  so `git status` is dirty within seconds of any commit. **This is not an error and does not
+  mean a push failed.** It is runtime data, not code.
+- **Both containers are running** (`api`, `sentinel`), dashboard at http://localhost:8420.
+- **A re-score was requested** for `team-3` after the last push. Scoring is queued, not
+  instant; results appear at https://sreoncall-leaderboard.vercel.app. Re-running `/update`
+  on an unchanged commit is skipped by the grader — only push, then update.
+
+## Pushing — the one non-obvious trap
+
+The `gh` CLI is logged in as **`kashishj-collab`, which has NO push access** to
+`Mahigurjarr/hackathon-sreoncall` (verified: `permissions.push == false`). Only the PAT in
+`.env` works — account **`Swiftkish`**, which does have push.
+
+Git therefore uses a credential helper at **`.git/sre-credential-helper.sh`** that reads
+`GITHUB_TOKEN` from `.env` at push time. It lives inside `.git/`, so it is never committed,
+and it keeps the token out of the remote URL, out of `.git/config`, and off the command line.
+`git push` just works.
+
+**Do not** put the token back in the remote URL — it leaks through `git remote -v`, which is
+how it was found and removed. **Do not** reach for `gh` to push; it will fail confusingly.
+
 ## Run it
 
 ```bash

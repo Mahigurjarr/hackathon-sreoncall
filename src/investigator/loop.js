@@ -198,6 +198,7 @@ function buildHandlers(ledger) {
     search_traces_ql: (args) => tools.search_traces_ql(args.traceql, args.limit, ledger),
     get_trace: (args) => tools.get_trace(args.traceId, ledger),
     compare_baseline: (args) => tools.compare_baseline(args.promql, args.minutes, ledger),
+    derive_baseline: (args) => tools.derive_baseline(args.promql, args.lookbackHours, ledger),
   };
 
   const handlers = {};

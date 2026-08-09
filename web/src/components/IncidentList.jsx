@@ -20,6 +20,17 @@ function proposalStateFor(incidentId, proposals) {
   return null;
 }
 
+// A redemption check that came back "unresolved" outranks everything else worth showing — a
+// still-recurring symptom after a decision was made is more urgent than "a fix is ready" or
+// "a PR is open," and one badge is all the row has room for.
+function badgeFor(inc, proposals) {
+  if (inc.redemption?.status === "unresolved") return "unresolved";
+  const proposalState = proposalStateFor(inc.id, proposals);
+  if (proposalState) return proposalState;
+  if (inc.redemption?.status === "confirmed") return "verified";
+  return null;
+}
+
 // Headline-first: one line per incident, nothing else. Full detail lives one click
 // away in IncidentDetail — the CLI's `status`/`list` split, as a list.
 export function IncidentList({ incidents, proposals = [], selectedId, onSelect }) {
@@ -49,7 +60,7 @@ export function IncidentList({ incidents, proposals = [], selectedId, onSelect }
             inc={inc}
             selected={inc.id === selectedId}
             onSelect={onSelect}
-            proposalState={proposalStateFor(inc.id, proposals)}
+            badge={badgeFor(inc, proposals)}
           />
         ))}
       </AnimatePresence>
@@ -65,7 +76,7 @@ export function IncidentList({ incidents, proposals = [], selectedId, onSelect }
               inc={inc}
               selected={inc.id === selectedId}
               onSelect={onSelect}
-              proposalState={proposalStateFor(inc.id, proposals)}
+              badge={badgeFor(inc, proposals)}
               dim
             />
           ))}
@@ -75,7 +86,15 @@ export function IncidentList({ incidents, proposals = [], selectedId, onSelect }
   );
 }
 
-function IncidentRow({ inc, selected, onSelect, proposalState, dim }) {
+const BADGE_STYLE = {
+  awaiting: "border-signal/40 bg-signal-dim text-signal",
+  applied: "border-severity-ok/40 bg-severity-ok-bg text-severity-ok",
+  verified: "border-severity-ok/40 bg-severity-ok-bg text-severity-ok",
+  unresolved: "border-severity-critical/40 bg-severity-critical-bg text-severity-critical",
+};
+const BADGE_LABEL = { awaiting: "FIX READY", applied: "PR OPEN", verified: "VERIFIED", unresolved: "STILL BROKEN" };
+
+function IncidentRow({ inc, selected, onSelect, badge, dim }) {
   const dot = CONFIDENCE_DOT[confidenceOf(inc)] || "var(--severity-low)";
   return (
     <motion.button
@@ -100,14 +119,9 @@ function IncidentRow({ inc, selected, onSelect, proposalState, dim }) {
         <span className="size-1.5 shrink-0 rounded-full" style={{ background: dim ? "var(--severity-ok)" : dot }} />
         <span className="truncate font-mono t-label text-muted-text">{inc.id}</span>
         <span className="truncate t-label text-muted-text-2">{serviceOf(inc)}</span>
-        {proposalState === "awaiting" && (
-          <span className="ml-auto shrink-0 rounded border border-signal/40 bg-signal-dim px-1 font-mono t-micro font-medium text-signal">
-            FIX READY
-          </span>
-        )}
-        {proposalState === "applied" && (
-          <span className="ml-auto shrink-0 rounded border border-severity-ok/40 bg-severity-ok-bg px-1 font-mono t-micro font-medium text-severity-ok">
-            PR OPEN
+        {badge && (
+          <span className={`ml-auto shrink-0 rounded border px-1 font-mono t-micro font-medium ${BADGE_STYLE[badge]}`}>
+            {BADGE_LABEL[badge]}
           </span>
         )}
       </span>

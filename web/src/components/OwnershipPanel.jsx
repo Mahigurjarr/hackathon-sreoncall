@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ChevronRight, GitPullRequest, Check, X, MessageSquare, Loader2, ExternalLink, AlertTriangle } from "lucide-react";
+import {
+  ChevronRight, GitPullRequest, Check, X, MessageSquare, Loader2, ExternalLink, AlertTriangle,
+  ShieldCheck, ShieldAlert, Clock,
+} from "lucide-react";
 import { CitedText } from "@/components/CitedText";
 import { approveProposal, reviseProposal, rejectProposal } from "@/lib/api";
 
@@ -28,6 +31,25 @@ const STATUS_STYLE = {
   rejected: { label: "REJECTED", cls: "border-border bg-surface-2 text-muted-text" },
   withdrawn: { label: "WITHDRAWN", cls: "border-border bg-surface-2 text-muted-text" },
   apply_failed: { label: "PR FAILED", cls: "border-severity-critical/40 bg-severity-critical-bg text-severity-critical" },
+};
+
+// Redemption: the agent re-checks its own decision (fix, decline, or reuse) against fresh
+// evidence after a delay. "confirmed" is the only status that closes the incident — see
+// src/actions/redemption.js. Deliberately its own small map rather than folded into
+// STATUS_STYLE above: it describes the OUTCOME of the decision, not the decision itself, and
+// an incident can be "PR OPEN" and "unresolved" at the same time (the PR didn't fix it).
+const REDEMPTION_STYLE = {
+  pending: "border-border bg-surface-2 text-muted-text",
+  confirmed: "border-severity-ok/40 bg-severity-ok-bg text-severity-ok",
+  unresolved: "border-severity-critical/40 bg-severity-critical-bg text-severity-critical",
+};
+
+const REDEMPTION_LABEL = { pending: "PENDING", confirmed: "VERIFIED FIXED", unresolved: "STILL RECURRING" };
+
+const REDEMPTION_ICON = {
+  pending: <Clock className="size-4 text-muted-text" />,
+  confirmed: <ShieldCheck className="size-4 text-severity-ok" />,
+  unresolved: <ShieldAlert className="size-4 text-severity-critical" />,
 };
 
 function Disclosure({ title, count, children, defaultOpen = false }) {
@@ -289,6 +311,48 @@ export function OwnershipPanel({ incident, proposals, github, onCite, onChanged 
           </>
         )}
       </div>
+
+      {/* --- Redemption: did the decision above actually hold? Closes the loop from
+          "PR opened" / "declined" to "verified" — the step most agent demos skip. --- */}
+      {incident.redemption && (
+        <div className="rounded-lg border border-border bg-surface p-3.5">
+          <div className="flex items-center gap-2">
+            {REDEMPTION_ICON[incident.redemption.status] || REDEMPTION_ICON.pending}
+            <span className="t-label font-medium tracking-wide text-muted-text">VERIFICATION</span>
+            <span
+              className={`ml-auto rounded border px-1.5 py-0.5 font-mono t-micro font-medium ${
+                REDEMPTION_STYLE[incident.redemption.status] || REDEMPTION_STYLE.pending
+              }`}
+            >
+              {REDEMPTION_LABEL[incident.redemption.status] || "CHECKING"}
+            </span>
+          </div>
+
+          {incident.redemption.status === "pending" && !incident.redemption.reason && (
+            <p className="mt-2 t-body text-muted-text">
+              Scheduled to re-check with fresh evidence at{" "}
+              {new Date(incident.redemption.dueAt).toLocaleTimeString()} — {incident.redemption.note}
+            </p>
+          )}
+
+          {incident.redemption.reason && (
+            <div className="mt-2">
+              <p className="t-body font-medium text-foreground">
+                {incident.redemption.status === "confirmed"
+                  ? "Re-checked and confirmed: the symptom cleared."
+                  : incident.redemption.status === "unresolved"
+                    ? "Re-checked — the symptom is still present."
+                    : "Re-checked, inconclusive so far — will check again."}
+              </p>
+              <CitedText text={incident.redemption.reason} onCite={onCite} className="mt-1 text-muted-text" />
+              <p className="mt-1.5 t-label text-muted-text-2">
+                {incident.redemption.confidence} confidence · checked{" "}
+                {new Date(incident.redemption.checkedAt).toLocaleString()}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* --- Ordered next steps for THIS incident --- */}
       {steps.length > 0 && (

@@ -167,4 +167,72 @@ async function runToolLoop({
   return { text: "", steps, messages: convo, exhausted: true };
 }
 
-module.exports = { chat, runToolLoop, MODELS, fixtureKey };
+// A variant of runToolLoop for a "gather evidence, then decide" shape: the model may call zero
+// or more ordinary tools (each dispatched to `handlers`, exactly like runToolLoop), but the
+// loop ends the instant it calls one of `terminalTools` — that call is returned to the caller
+// UNEXECUTED, so the caller decides what the decision means (propose_fix vs no_code_fix,
+// recovered vs not) rather than this generic loop trying to interpret it.
+//
+// Why this exists rather than reusing runToolLoop as-is: runToolLoop's only exit condition is
+// "the model made no tool call this turn", which is wrong here — a decision tool call IS the
+// exit condition, and running it through the ordinary handler dispatch would either need a
+// handler that does something on the side (impossible to express cleanly) or would bounce an
+// "unhandled tool" error back to the model and loop again. Both remediation (propose_fix /
+// no_code_fix) and redemption verification (verify_recovery) need exactly this shape:
+// evidence-gathering tools with real handlers, and exactly one named decision to stop on.
+async function runDecisionLoop({
+  model = MODELS.deep, system, messages = [], tools = [], handlers = {},
+  terminalTools, maxTurns = 8,
+}) {
+  if (!Array.isArray(terminalTools) || !terminalTools.length) {
+    throw new Error("runDecisionLoop() requires a non-empty terminalTools list");
+  }
+
+  const convo = [...messages];
+  const gathered = []; // { name, args, result } for every evidence-gathering call made
+
+  for (let turn = 0; turn < maxTurns; turn++) {
+    const reply = await chat({ model, system, messages: convo, tools, toolChoice: "required" });
+    convo.push(reply.message);
+
+    if (!reply.toolCalls.length) {
+      throw new Error("runDecisionLoop(): model made no tool call despite toolChoice='required'");
+    }
+
+    // The model can return several PARALLEL tool calls in one turn, not just one — if any of
+    // them is a terminal decision, that turn IS the decision, however many other calls rode
+    // along with it. Return immediately without answering the rest: nothing downstream sends
+    // `convo` back to the API, so an unanswered sibling tool_call_id is harmless once we exit.
+    const terminalCall = reply.toolCalls.find((c) => terminalTools.includes(c.name));
+    if (terminalCall) {
+      return { call: terminalCall, gathered, turnsUsed: turn + 1, messages: convo };
+    }
+
+    // No terminal call this turn — every tool_call_id in an assistant message MUST get a
+    // matching tool-result message before the next request, or the API rejects it outright.
+    // Answer all of them (matches runToolLoop's own iteration), not just the first.
+    for (const call of reply.toolCalls) {
+      const handler = handlers[call.name];
+      let result;
+      try {
+        result = handler
+          ? await handler(call.args)
+          : { error: `no handler registered for tool "${call.name}"` };
+      } catch (err) {
+        // Same as runToolLoop: hand a failed query back to the model as information to reason
+        // about, not a reason to abort — it may retry with a different query or proceed without it.
+        result = { error: err.message };
+      }
+      gathered.push({ name: call.name, args: call.args, result });
+      convo.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: typeof result === "string" ? result : JSON.stringify(result),
+      });
+    }
+  }
+
+  throw new Error(`runDecisionLoop(): exhausted ${maxTurns} turns without reaching a decision`);
+}
+
+module.exports = { chat, runToolLoop, runDecisionLoop, MODELS, fixtureKey };

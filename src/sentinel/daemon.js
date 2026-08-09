@@ -16,6 +16,7 @@ const { draftRemediation } = require("../actions/remediation");
 const { recall, priorArtBlock } = require("../memory/recall");
 const { probeFleet } = require("../lgtm/health");
 const { explainFleet } = require("../actions/explain");
+const { scheduleRedemption, runRedemptionChecks } = require("../actions/redemption");
 
 // A recalled diagnosis still gets verified live, but it does not need the full search that
 // produced it the first time — the hypothesis is already on the table, so the remaining work
@@ -79,7 +80,17 @@ async function attachRemediation(incident, ledger, memory = null) {
   // that fix would produce a second, near-identical PR for the same cause. Point at the
   // existing proposal instead — the saving here is a whole model call plus a duplicate PR
   // nobody wanted to review twice.
-  const prior = memory?.verdict === "reuse" ? memory.priorIncident : null;
+  // A prior incident whose redemption check came back "unresolved" is proof its fix did NOT
+  // hold — reusing it here would repeat a mistake the agent already knows about. Fall through
+  // to authoring fresh instead of pointing at a fix already known to have failed. This is the
+  // self-learning feedback loop: an outcome, not just a diagnosis, changes future behaviour.
+  const priorFixKnownBad = memory?.priorIncident?.redemption?.status === "unresolved";
+  const prior = memory?.verdict === "reuse" && !priorFixKnownBad ? memory.priorIncident : null;
+  if (priorFixKnownBad) {
+    console.log(
+      `[sentinel] ${incident.id}: not reusing ${memory.priorIncident.id}'s fix — its redemption check found it didn't hold`
+    );
+  }
   if (prior) {
     const existing = (store.load().proposals || []).find(
       (p) => p.payload?.incidentId === prior.id && ["draft", "revised", "approved", "applied"].includes(p.status)
@@ -181,6 +192,10 @@ async function openIncidentFromInvestigation(service, trigger, frame) {
   });
 
   await attachRemediation(incident, ledger, memory);
+  // Every remediation outcome — drafted, declined, reused, or even a failed draft attempt —
+  // is a claim about the incident's fate. Schedule a check regardless of which branch fired;
+  // an unverified decline is exactly as risky as an unverified fix.
+  scheduleRedemption(incident.id, "initial remediation outcome recorded");
   return store.load().incidents.find((i) => i.id === incident.id) || incident;
 }
 
@@ -239,7 +254,12 @@ async function sweepOnce() {
     });
   }
 
-  return { ...decision, opened, failed };
+  // Closing the loop on incidents opened by earlier sweeps: re-verify whatever came due, so
+  // "applied"/"declined" can become "confirmed resolved" (or, just as importantly, surface as
+  // "didn't hold") with fresh cited evidence rather than sitting as an unchecked claim forever.
+  const redemptions = await runRedemptionChecks();
+
+  return { ...decision, opened, failed, redemptions };
 }
 
 async function runDaemon({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
@@ -252,7 +272,10 @@ async function runDaemon({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
       const n = decision.anomalies.length;
       const r = decision.emergingRisks.length;
       const failedSuffix = decision.failed.length ? `, ${decision.failed.length} investigation(s) failed (will retry next sweep)` : "";
-      console.log(`[sentinel] sweep complete: ${n} anomal${n === 1 ? "y" : "ies"}, ${r} emerging risk(s), ${decision.opened.length} incident(s) opened${failedSuffix}`);
+      const redeemedSuffix = decision.redemptions.length
+        ? `, ${decision.redemptions.length} redemption check(s) run (${decision.redemptions.filter((x) => x.recovered).length} recovered)`
+        : "";
+      console.log(`[sentinel] sweep complete: ${n} anomal${n === 1 ? "y" : "ies"}, ${r} emerging risk(s), ${decision.opened.length} incident(s) opened${failedSuffix}${redeemedSuffix}`);
     } catch (err) {
       console.error("[sentinel] sweep failed:", err.message);
     }
