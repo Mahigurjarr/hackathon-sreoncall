@@ -3,19 +3,16 @@
 <style>
   :root {
     --ground: #0a0d13;
-    --panel: #121824;
-    --panel-2: #19212f;
-    --line: #26314a;
-    --line-soft: #1d2537;
-    --text: #e7ecf4;
-    --muted: #93a0b5;
-    --muted-2: #626f86;
-    --signal: #8fd9c8;
-    --signal-dim: rgba(143, 217, 200, 0.12);
-    --critical: #f2a5a5;
-    --warn: #f0c088;
-    --ok: #9fd8a8;
-    --blue: #8fb8e8;
+    --panel: #141b28;
+    --panel-2: #1b2433;
+    --line: #2c3852;
+    --line-soft: #222c42;
+    --text: #eef2f8;
+    --muted: #a8b4c7;
+    --muted-2: #808ea6;
+    --signal: #97e0cf;
+    --signal-dim: rgba(143, 217, 200, 0.14);
+    --warn: #f2c58f;
 
     --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -37,17 +34,17 @@
   }
 
   .wrap {
-    max-width: 1320px;
+    max-width: 1340px;
     margin: 0 auto;
     padding: 72px 28px 96px;
     display: flex;
     flex-direction: column;
-    gap: 72px;
+    gap: 80px;
   }
 
   .eyebrow {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--signal);
@@ -64,107 +61,87 @@
   }
 
   header p.lede {
-    max-width: 65ch;
+    max-width: 64ch;
     color: var(--muted);
     margin: 18px 0 0;
-    font-size: 17px;
+    font-size: 17.5px;
   }
 
   header .meta {
     font-family: var(--mono);
-    font-size: 11.5px;
+    font-size: 12.5px;
     color: var(--muted-2);
     margin: 26px 0 0;
     padding-top: 18px;
     border-top: 1px solid var(--line-soft);
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 26px;
+    gap: 8px 28px;
   }
 
-  figure {
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
+  figure { margin: 0; display: flex; flex-direction: column; gap: 22px; }
 
   .figure-head { display: flex; flex-direction: column; gap: 8px; }
-  .figure-head h2 {
-    margin: 0;
-    font-size: 25px;
-    letter-spacing: -0.025em;
-    font-weight: 600;
-  }
-  .figure-head p {
-    margin: 0;
-    max-width: 68ch;
-    color: var(--muted);
-    font-size: 15.5px;
-  }
+  .figure-head h2 { margin: 0; font-size: 27px; letter-spacing: -0.025em; font-weight: 600; }
+  .figure-head p { margin: 0; max-width: 66ch; color: var(--muted); font-size: 16.5px; }
 
   .canvas {
     border: 1px solid var(--line);
     border-radius: 14px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 45%), var(--ground);
-    padding: 26px 22px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 45%), var(--ground);
+    padding: 30px 24px;
     overflow-x: auto;
   }
-  .canvas svg { display: block; width: 100%; height: auto; min-width: 720px; }
+  .canvas svg { display: block; width: 100%; height: auto; min-width: 860px; }
 
   figcaption {
     color: var(--muted);
-    font-size: 14.5px;
-    max-width: 74ch;
+    font-size: 16px;
+    max-width: 72ch;
     border-left: 2px solid var(--line);
-    padding-left: 16px;
+    padding-left: 18px;
   }
   figcaption strong { color: var(--text); font-weight: 600; }
+  figcaption code { font-family: var(--mono); font-size: 0.92em; color: var(--text); }
 
   .legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px 28px;
+    gap: 10px 30px;
     font-family: var(--mono);
-    font-size: 11.5px;
+    font-size: 12.5px;
     color: var(--muted);
-    letter-spacing: 0.02em;
   }
-  .legend span { display: inline-flex; align-items: center; gap: 9px; }
-  .legend i {
-    width: 26px; height: 0; display: inline-block;
-    border-top: 2px solid var(--muted-2);
-  }
+  .legend span { display: inline-flex; align-items: center; gap: 10px; }
+  .legend i { width: 28px; height: 0; display: inline-block; border-top: 2px solid var(--muted-2); }
   .legend i.dash { border-top-style: dashed; }
   .legend i.acc { border-top-color: var(--signal); }
   .legend i.warnc { border-top-color: var(--warn); }
 
   /* ---- shared SVG vocabulary ---- */
-  .box { fill: var(--panel); stroke: var(--line); stroke-width: 1; }
-  .box-2 { fill: var(--panel-2); stroke: var(--line); stroke-width: 1; }
-  .box-ext { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
-  .box-acc { fill: var(--signal-dim); stroke: var(--signal); stroke-width: 1.4; }
-  .band { fill: none; stroke: var(--line-soft); stroke-width: 1; }
+  .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+  .box-2 { fill: var(--panel-2); stroke: var(--line); stroke-width: 1.2; }
+  .box-ext { fill: none; stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 4 4; }
+  .box-acc { fill: var(--signal-dim); stroke: var(--signal); stroke-width: 1.6; }
 
-  .t { fill: var(--text); font-family: var(--sans); font-size: 14px; font-weight: 600; }
-  .t-acc { fill: var(--signal); font-family: var(--sans); font-size: 14px; font-weight: 600; }
-  .s { fill: var(--muted); font-family: var(--mono); font-size: 11px; letter-spacing: 0.01em; }
-  .s-dim { fill: var(--muted-2); font-family: var(--mono); font-size: 10.5px; }
-  .zone { fill: var(--muted-2); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; }
-  .lbl { fill: var(--muted); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.01em; }
-  .lbl-acc { fill: var(--signal); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.01em; }
-  .lbl-warn { fill: var(--warn); font-family: var(--mono); font-size: 10.5px; }
+  .t { fill: var(--text); font-family: var(--sans); font-size: 17px; font-weight: 600; }
+  .t-acc { fill: var(--signal); font-family: var(--sans); font-size: 17px; font-weight: 600; }
+  .s { fill: var(--muted); font-family: var(--mono); font-size: 12.5px; }
+  .zone { fill: var(--muted-2); font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; }
+  .lbl { fill: var(--muted); font-family: var(--mono); font-size: 12.5px; }
+  .lbl-acc { fill: var(--signal); font-family: var(--mono); font-size: 12.5px; }
+  .lbl-warn { fill: var(--warn); font-family: var(--mono); font-size: 12.5px; }
 
-  .ln { stroke: var(--muted-2); stroke-width: 1.4; fill: none; }
-  .ln-soft { stroke: var(--line); stroke-width: 1.4; fill: none; }
-  .ln-dash { stroke: var(--muted-2); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
-  .ln-acc { stroke: var(--signal); stroke-width: 1.8; fill: none; }
-  .ln-warn { stroke: var(--warn); stroke-width: 1.4; fill: none; }
+  .ln { stroke: var(--muted-2); stroke-width: 1.6; fill: none; }
+  .ln-soft { stroke: var(--line); stroke-width: 1.6; fill: none; }
+  .ln-dash { stroke: var(--muted-2); stroke-width: 1.6; fill: none; stroke-dasharray: 6 5; }
+  .ln-acc { stroke: var(--signal); stroke-width: 2; fill: none; }
+  .ln-warn { stroke: var(--warn); stroke-width: 1.8; fill: none; }
   .glyph { fill: var(--signal); }
 
   @media (max-width: 640px) {
-    .wrap { padding: 48px 16px 72px; gap: 56px; }
-    .canvas { padding: 16px 12px; }
+    .wrap { padding: 48px 16px 72px; gap: 60px; }
+    .canvas { padding: 18px 12px; }
   }
 </style>
 
@@ -194,8 +171,8 @@
       <h2>System architecture</h2>
       <p>
         Telemetry enters at the top and can only be read. Every module that reasons drops into a
-        shared spine whose centre is one file. A person appears exactly twice in this picture —
-        reading the console, and approving the one action that leaves the machine.
+        shared spine whose centre is one file. A person appears exactly twice — reading the
+        console, and approving the one action that leaves the machine.
       </p>
     </div>
 
@@ -204,145 +181,133 @@
            aria-label="Layered architecture: read-only LGTM telemetry at the top feeds four agent-core modules, which all use a shared spine containing the evidence ledger, the SQLite store, the practice docs and the single LLM choke point; below the spine sit four interfaces, and the only write to GitHub passes through a human approval gate.">
         <defs>
           <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0 0 L10 5 L0 10 z" fill="#626f86"></path>
+            <path d="M0 0 L10 5 L0 10 z" fill="#808ea6"></path>
           </marker>
           <marker id="a1acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0 0 L10 5 L0 10 z" fill="#8fd9c8"></path>
+            <path d="M0 0 L10 5 L0 10 z" fill="#97e0cf"></path>
           </marker>
         </defs>
 
         <!-- Zone labels live in the left gutter, rotated, so no band label can ever sit on an
              arrow channel between two bands. -->
-        <text class="zone" x="26" y="72" text-anchor="middle" transform="rotate(-90 26 72)">Senses</text>
-        <text class="zone" x="26" y="228" text-anchor="middle" transform="rotate(-90 26 228)">Agent core</text>
-        <text class="zone" x="26" y="403" text-anchor="middle" transform="rotate(-90 26 403)">Spine</text>
-        <text class="zone" x="26" y="546" text-anchor="middle" transform="rotate(-90 26 546)">Interfaces</text>
+        <text class="zone" x="24" y="72" text-anchor="middle" transform="rotate(-90 24 72)">Senses</text>
+        <text class="zone" x="24" y="228" text-anchor="middle" transform="rotate(-90 24 228)">Agent core</text>
+        <text class="zone" x="24" y="403" text-anchor="middle" transform="rotate(-90 24 403)">Spine</text>
+        <text class="zone" x="24" y="546" text-anchor="middle" transform="rotate(-90 24 546)">Interfaces</text>
 
         <!-- ---------- band 1: LGTM ---------- -->
-        <rect class="box-ext" x="40" y="36" width="1040" height="72" rx="9"></rect>
-        <text class="t" x="62" y="66">Live LGTM stack — the fleet's own telemetry</text>
-        <text class="s" x="62" y="90">Mimir :9009 metrics · Loki :3100 logs · Tempo :3200 traces · X-Scope-OrgID: hackathon</text>
+        <rect class="box-ext" x="48" y="36" width="1032" height="72" rx="9"></rect>
+        <text class="t" x="70" y="68">Live LGTM stack — the fleet's own telemetry</text>
+        <text class="s" x="70" y="93">Mimir :9009 metrics · Loki :3100 logs · Tempo :3200 traces</text>
 
         <!-- arrows between LGTM and core -->
-        <line class="ln" x1="157" y1="110" x2="157" y2="172" marker-end="url(#a1)"></line>
-        <text class="lbl" x="167" y="146">GET only · every 45s</text>
-        <line class="ln" x1="500" y1="176" x2="500" y2="112" marker-end="url(#a1)"></line>
-        <text class="lbl" x="510" y="146">7 read-only tools, on demand</text>
+        <line class="ln" x1="165" y1="110" x2="165" y2="172" marker-end="url(#a1)"></line>
+        <text class="lbl" x="177" y="146">GET only · every 45s</text>
+        <line class="ln" x1="520" y1="176" x2="520" y2="112" marker-end="url(#a1)"></line>
+        <text class="lbl" x="532" y="146">7 read-only tools, on demand</text>
 
         <!-- ---------- band 2: agent core ---------- -->
-        <rect class="box" x="40" y="176" width="235" height="104" rx="9"></rect>
-        <text class="t" x="60" y="208">Sentinel</text>
-        <text class="s" x="60" y="230">frame · triage · daemon</text>
-        <text class="s-dim" x="60" y="250">the loop with no exit</text>
-        <text class="s-dim" x="60" y="266">condition and no human</text>
+        <rect class="box" x="48" y="176" width="235" height="104" rx="9"></rect>
+        <text class="t" x="70" y="220">Sentinel</text>
+        <text class="s" x="70" y="248">frame · triage · daemon</text>
 
-        <rect class="box" x="305" y="176" width="235" height="104" rx="9"></rect>
-        <text class="t" x="325" y="208">Investigator</text>
-        <text class="s" x="325" y="230">tools · loop · policy</text>
-        <text class="s-dim" x="325" y="250">hypothesis, then a query</text>
-        <text class="s-dim" x="325" y="266">chosen to break it</text>
+        <rect class="box" x="313" y="176" width="235" height="104" rx="9"></rect>
+        <text class="t" x="335" y="220">Investigator</text>
+        <text class="s" x="335" y="248">tools · loop · policy</text>
 
-        <rect class="box" x="570" y="176" width="235" height="104" rx="9"></rect>
-        <text class="t" x="590" y="208">Memory</text>
-        <text class="s" x="590" y="230">recall · redemption · lessons</text>
-        <text class="s-dim" x="590" y="250">before, after, and across</text>
-        <text class="s-dim" x="590" y="266">incidents</text>
+        <rect class="box" x="578" y="176" width="235" height="104" rx="9"></rect>
+        <text class="t" x="600" y="220">Memory</text>
+        <text class="s" x="600" y="248">reuse · verify · learn</text>
 
-        <rect class="box" x="835" y="176" width="235" height="104" rx="9"></rect>
-        <text class="t" x="855" y="208">Actions</text>
-        <text class="s" x="855" y="230">remediation · proposals</text>
-        <text class="s-dim" x="855" y="250">decides, drafts, and stops</text>
-        <text class="s-dim" x="855" y="266">at the gate</text>
+        <rect class="box" x="843" y="176" width="235" height="104" rx="9"></rect>
+        <text class="t" x="865" y="220">Actions</text>
+        <text class="s" x="865" y="248">decide · draft · open PR</text>
 
         <!-- drops into the bus -->
-        <line class="ln-soft" x1="157" y1="280" x2="157" y2="316"></line>
-        <line class="ln-soft" x1="422" y1="280" x2="422" y2="316"></line>
-        <line class="ln-soft" x1="687" y1="280" x2="687" y2="316"></line>
-        <line class="ln-soft" x1="952" y1="280" x2="952" y2="316"></line>
-        <line class="ln-soft" x1="120" y1="316" x2="1000" y2="316"></line>
+        <line class="ln-soft" x1="165" y1="280" x2="165" y2="316"></line>
+        <line class="ln-soft" x1="430" y1="280" x2="430" y2="316"></line>
+        <line class="ln-soft" x1="695" y1="280" x2="695" y2="316"></line>
+        <line class="ln-soft" x1="960" y1="280" x2="960" y2="316"></line>
+        <line class="ln-soft" x1="128" y1="316" x2="1000" y2="316"></line>
 
         <!-- bus down into the spine -->
-        <line class="ln" x1="157" y1="316" x2="157" y2="352" marker-end="url(#a1)"></line>
-        <line class="ln" x1="422" y1="316" x2="422" y2="352" marker-end="url(#a1)"></line>
-        <line class="ln" x1="952" y1="316" x2="952" y2="352" marker-end="url(#a1)"></line>
+        <line class="ln" x1="165" y1="316" x2="165" y2="352" marker-end="url(#a1)"></line>
+        <line class="ln" x1="430" y1="316" x2="430" y2="352" marker-end="url(#a1)"></line>
+        <line class="ln" x1="960" y1="316" x2="960" y2="352" marker-end="url(#a1)"></line>
         <!-- practices flows the other way: into the reasoning, not out of it -->
-        <line class="ln-dash" x1="687" y1="352" x2="687" y2="318" marker-end="url(#a1)"></line>
-        <text class="lbl" x="700" y="340">read fresh, every prompt</text>
+        <line class="ln-dash" x1="695" y1="352" x2="695" y2="318" marker-end="url(#a1)"></line>
+        <text class="lbl" x="710" y="341">read fresh, every prompt</text>
 
         <!-- ---------- band 3: spine ---------- -->
-        <rect class="box-2" x="40" y="356" width="235" height="94" rx="9"></rect>
-        <text class="t" x="60" y="386">evidence/ledger.js</text>
-        <text class="s" x="60" y="408">ids assigned at query time</text>
-        <text class="s-dim" x="60" y="428">record · validate · repair</text>
+        <rect class="box-2" x="48" y="356" width="235" height="94" rx="9"></rect>
+        <text class="t" x="70" y="396">evidence/ledger.js</text>
+        <text class="s" x="70" y="423">ids given at query time</text>
 
-        <rect class="box-2" x="305" y="356" width="235" height="94" rx="9"></rect>
-        <text class="t" x="325" y="386">store/state.db</text>
-        <text class="s" x="325" y="408">SQLite via node:sqlite</text>
-        <text class="s-dim" x="325" y="428">lockfile · transactions</text>
+        <rect class="box-2" x="313" y="356" width="235" height="94" rx="9"></rect>
+        <text class="t" x="335" y="396">store/state.db</text>
+        <text class="s" x="335" y="423">SQLite · one transaction</text>
 
-        <rect class="box-2" x="570" y="356" width="235" height="94" rx="9"></rect>
-        <text class="t" x="590" y="386">practices</text>
-        <text class="s" x="590" y="408">sre-as-code/practices/*.md</text>
-        <text class="s-dim" x="590" y="428">edit a file, change the agent</text>
+        <rect class="box-2" x="578" y="356" width="235" height="94" rx="9"></rect>
+        <text class="t" x="600" y="396">practices</text>
+        <text class="s" x="600" y="423">editable, no rebuild</text>
 
-        <rect class="box-acc" x="835" y="356" width="235" height="94" rx="9"></rect>
-        <text class="t-acc" x="855" y="386">llm/client.js</text>
-        <text class="s" x="855" y="408">the choke point</text>
-        <text class="s-dim" x="855" y="428">delete it and nothing reasons</text>
+        <rect class="box-acc" x="843" y="356" width="235" height="94" rx="9"></rect>
+        <text class="t-acc" x="865" y="396">llm/client.js</text>
+        <text class="s" x="865" y="423">the choke point</text>
 
         <!-- model provider -->
-        <rect class="box-ext" x="1150" y="356" width="210" height="94" rx="9"></rect>
-        <text class="t" x="1170" y="392">OpenAI API</text>
-        <text class="s" x="1170" y="414">gpt-5 · gpt-5-mini</text>
-        <line class="ln-acc" x1="1070" y1="403" x2="1146" y2="403" marker-end="url(#a1acc)"></line>
-        <text class="lbl-acc" x="1108" y="392" text-anchor="middle">every</text>
-        <text class="lbl-acc" x="1108" y="425" text-anchor="middle">judgement</text>
+        <rect class="box-ext" x="1160" y="356" width="200" height="94" rx="9"></rect>
+        <text class="t" x="1182" y="396">OpenAI API</text>
+        <text class="s" x="1182" y="423">gpt-5 · gpt-5-mini</text>
+        <line class="ln-acc" x1="1078" y1="403" x2="1156" y2="403" marker-end="url(#a1acc)"></line>
+        <text class="lbl-acc" x="1117" y="390" text-anchor="middle">every</text>
+        <text class="lbl-acc" x="1117" y="426" text-anchor="middle">judgement</text>
 
         <!-- ---------- spine down to interfaces ---------- -->
-        <line class="ln-soft" x1="422" y1="450" x2="422" y2="476"></line>
-        <line class="ln-soft" x1="120" y1="476" x2="1000" y2="476"></line>
-        <text class="lbl" x="432" y="468">state out · approvals in</text>
-        <line class="ln" x1="157" y1="476" x2="157" y2="502" marker-end="url(#a1)"></line>
-        <line class="ln" x1="687" y1="476" x2="687" y2="502" marker-end="url(#a1)"></line>
-        <line class="ln" x1="952" y1="476" x2="952" y2="502" marker-end="url(#a1)"></line>
-        <line class="ln" x1="422" y1="476" x2="422" y2="502" marker-end="url(#a1)"></line>
+        <line class="ln-soft" x1="430" y1="450" x2="430" y2="476"></line>
+        <line class="ln-soft" x1="128" y1="476" x2="1000" y2="476"></line>
+        <text class="lbl" x="442" y="468">state out · approvals in</text>
+        <line class="ln" x1="165" y1="476" x2="165" y2="502" marker-end="url(#a1)"></line>
+        <line class="ln" x1="430" y1="476" x2="430" y2="502" marker-end="url(#a1)"></line>
+        <line class="ln" x1="695" y1="476" x2="695" y2="502" marker-end="url(#a1)"></line>
+        <line class="ln" x1="960" y1="476" x2="960" y2="502" marker-end="url(#a1)"></line>
 
         <!-- ---------- band 4: interfaces ---------- -->
-        <rect class="box" x="40" y="506" width="235" height="80" rx="9"></rect>
-        <text class="t" x="60" y="536">Console</text>
-        <text class="s" x="60" y="558">React · four disclosure layers</text>
+        <rect class="box" x="48" y="506" width="235" height="80" rx="9"></rect>
+        <text class="t" x="70" y="542">Console</text>
+        <text class="s" x="70" y="566">React · four layers</text>
 
-        <rect class="box" x="305" y="506" width="235" height="80" rx="9"></rect>
-        <text class="t" x="325" y="536">MCP server</text>
-        <text class="s" x="325" y="558">9 tools · stdio JSON-RPC</text>
+        <rect class="box" x="313" y="506" width="235" height="80" rx="9"></rect>
+        <text class="t" x="335" y="542">MCP server</text>
+        <text class="s" x="335" y="566">9 tools · stdio</text>
 
-        <rect class="box" x="570" y="506" width="235" height="80" rx="9"></rect>
-        <text class="t" x="590" y="536">CLI</text>
-        <text class="s" x="590" y="558">bin/sre</text>
+        <rect class="box" x="578" y="506" width="235" height="80" rx="9"></rect>
+        <text class="t" x="600" y="542">CLI</text>
+        <text class="s" x="600" y="566">bin/sre</text>
 
-        <rect class="box" x="835" y="506" width="235" height="80" rx="9"></rect>
-        <text class="t" x="855" y="536">HTTP API :8420</text>
-        <text class="s" x="855" y="558">node:http · zero deps</text>
+        <rect class="box" x="843" y="506" width="235" height="80" rx="9"></rect>
+        <text class="t" x="865" y="542">HTTP API :8420</text>
+        <text class="s" x="865" y="566">node:http · zero deps</text>
 
         <!-- on-call engineer -->
-        <circle class="glyph" cx="48" cy="616" r="5"></circle>
-        <path class="glyph" d="M40 632 a8 8 0 0 1 16 0 z"></path>
-        <text class="lbl-acc" x="64" y="624">on-call engineer</text>
-        <path class="ln-acc" d="M178 620 L210 620 L210 590" marker-end="url(#a1acc)"></path>
+        <circle class="glyph" cx="56" cy="618" r="5.5"></circle>
+        <path class="glyph" d="M47 635 a9 9 0 0 1 18 0 z"></path>
+        <text class="lbl-acc" x="74" y="627">on-call engineer</text>
+        <path class="ln-acc" d="M212 622 L244 622 L244 590" marker-end="url(#a1acc)"></path>
 
         <!-- the one write, through the gate -->
-        <line class="ln-acc" x1="1070" y1="546" x2="1094" y2="546"></line>
-        <line class="ln-acc" x1="1100" y1="522" x2="1100" y2="570"></line>
-        <circle class="glyph" cx="1100" cy="512" r="5"></circle>
-        <line class="ln-acc" x1="1106" y1="546" x2="1146" y2="546" marker-end="url(#a1acc)"></line>
-        <text class="lbl-acc" x="1100" y="596" text-anchor="middle">human approves</text>
+        <line class="ln-acc" x1="1078" y1="546" x2="1104" y2="546"></line>
+        <line class="ln-acc" x1="1110" y1="520" x2="1110" y2="572"></line>
+        <circle class="glyph" cx="1110" cy="510" r="5.5"></circle>
+        <line class="ln-acc" x1="1116" y1="546" x2="1156" y2="546" marker-end="url(#a1acc)"></line>
+        <text class="lbl-acc" x="1110" y="600" text-anchor="middle">human approves</text>
 
-        <rect class="box-ext" x="1150" y="506" width="210" height="80" rx="9"></rect>
-        <text class="t" x="1170" y="540">GitHub</text>
-        <text class="s" x="1170" y="562">branch + pull request</text>
+        <rect class="box-ext" x="1160" y="506" width="200" height="80" rx="9"></rect>
+        <text class="t" x="1182" y="542">GitHub</text>
+        <text class="s" x="1182" y="566">branch + PR</text>
 
-        <text class="s-dim" x="1150" y="632">the only write that leaves</text>
-        <text class="s-dim" x="1150" y="648">this machine</text>
+        <text class="lbl" x="1160" y="632">the only write that</text>
+        <text class="lbl" x="1160" y="650">leaves this machine</text>
       </svg>
     </div>
 
@@ -378,132 +343,132 @@
            aria-label="Incident lifecycle: a 45-second sweep builds a telemetry frame, triage judges whether anything is anomalous, emerging risks escalate after recurring three times in thirty minutes, recall sets the investigation budget, the investigator states and tries to break a hypothesis, a policy layer checks whether the confidence was earned, remediation either declines or drafts a proposal, a human approves before any pull request is opened, and a redemption check later verifies against fresh evidence, with an unresolved outcome feeding back to block reuse of that fix.">
         <defs>
           <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0 0 L10 5 L0 10 z" fill="#626f86"></path>
+            <path d="M0 0 L10 5 L0 10 z" fill="#808ea6"></path>
           </marker>
           <marker id="a2acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0 0 L10 5 L0 10 z" fill="#8fd9c8"></path>
+            <path d="M0 0 L10 5 L0 10 z" fill="#97e0cf"></path>
           </marker>
           <marker id="a2warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0 0 L10 5 L0 10 z" fill="#f0c088"></path>
+            <path d="M0 0 L10 5 L0 10 z" fill="#f2c58f"></path>
           </marker>
         </defs>
 
         <!-- ================= main spine ================= -->
-        <rect class="box-acc" x="130" y="30" width="300" height="54" rx="27"></rect>
+        <rect class="box-acc" x="130" y="30" width="300" height="56" rx="28"></rect>
         <text class="t-acc" x="280" y="54" text-anchor="middle">Sweep — unprompted</text>
-        <text class="s" x="280" y="72" text-anchor="middle">every 45s, forever, nobody triggers it</text>
-        <line class="ln" x1="280" y1="84" x2="280" y2="128" marker-end="url(#a2)"></line>
+        <text class="s" x="280" y="74" text-anchor="middle">every 45s · nobody triggers it</text>
+        <line class="ln" x1="280" y1="86" x2="280" y2="128" marker-end="url(#a2)"></line>
 
         <rect class="box" x="130" y="130" width="300" height="62" rx="9"></rect>
-        <text class="t" x="280" y="156" text-anchor="middle">Build the frame</text>
-        <text class="s" x="280" y="177" text-anchor="middle">5 bulk queries · every one ledgered</text>
+        <text class="t" x="280" y="158" text-anchor="middle">Build the frame</text>
+        <text class="s" x="280" y="180" text-anchor="middle">5 bulk queries, all ledgered</text>
         <line class="ln" x1="280" y1="192" x2="280" y2="206" marker-end="url(#a2)"></line>
 
         <!-- triage diamond -->
         <path class="box-2" d="M280 208 L400 266 L280 324 L160 266 z"></path>
-        <text class="t" x="280" y="262" text-anchor="middle">Anything anomalous?</text>
-        <text class="s-dim" x="280" y="281" text-anchor="middle">no threshold — a live judgement</text>
+        <text class="t" x="280" y="264" text-anchor="middle">Anomalous?</text>
+        <text class="s" x="280" y="286" text-anchor="middle">no fixed threshold</text>
 
-        <text class="lbl" x="292" y="344">yes</text>
+        <text class="lbl" x="294" y="346">yes</text>
         <line class="ln" x1="280" y1="324" x2="280" y2="358" marker-end="url(#a2)"></line>
 
         <!-- emerging-risk branch -->
-        <text class="lbl" x="412" y="258">not yet</text>
+        <text class="lbl" x="414" y="256">not yet</text>
         <line class="ln" x1="400" y1="266" x2="556" y2="266" marker-end="url(#a2)"></line>
 
         <rect class="box" x="560" y="234" width="320" height="64" rx="9"></rect>
-        <text class="t" x="580" y="260">Emerging risk — noted</text>
-        <text class="s" x="580" y="282">displayed, re-checked next sweep</text>
+        <text class="t" x="582" y="262">Emerging risk — noted</text>
+        <text class="s" x="582" y="284">re-checked next sweep</text>
         <line class="ln" x1="720" y1="298" x2="720" y2="330" marker-end="url(#a2)"></line>
 
         <rect class="box" x="560" y="332" width="320" height="64" rx="9"></rect>
-        <text class="t" x="580" y="358">Same pattern 3× in 30 min?</text>
-        <text class="s" x="580" y="380">escalates on the agent's own initiative</text>
+        <text class="t" x="582" y="360">Same pattern 3× in 30 min?</text>
+        <text class="s" x="582" y="382">escalates on its own initiative</text>
 
         <!-- escalation rejoins the main flow -->
         <path class="ln" d="M560 364 L500 364 L500 402 L404 402" marker-end="url(#a2)"></path>
-        <text class="lbl" x="496" y="418" text-anchor="end">escalated</text>
+        <text class="lbl" x="496" y="420" text-anchor="end">escalated</text>
 
         <!-- recall diamond -->
         <path class="box-2" d="M280 346 L400 402 L280 458 L160 402 z"></path>
-        <text class="t" x="280" y="398" text-anchor="middle">Seen this mechanism?</text>
-        <text class="s-dim" x="280" y="417" text-anchor="middle">by mechanism, not service name</text>
+        <text class="t" x="280" y="400" text-anchor="middle">Seen this before?</text>
+        <text class="s" x="280" y="422" text-anchor="middle">by mechanism, not name</text>
 
         <line class="ln" x1="280" y1="458" x2="280" y2="500" marker-end="url(#a2)"></line>
-        <text class="lbl" x="292" y="478">reuse → 4 turns · related or novel → 12</text>
+        <text class="lbl" x="294" y="480">reuse → 4 turns · novel → 12</text>
 
         <rect class="box" x="130" y="502" width="300" height="76" rx="9"></rect>
-        <text class="t" x="280" y="528" text-anchor="middle">Investigate</text>
-        <text class="s" x="280" y="549" text-anchor="middle">state a hypothesis, then query</text>
-        <text class="s" x="280" y="566" text-anchor="middle">for what would prove it wrong</text>
+        <text class="t" x="280" y="530" text-anchor="middle">Investigate</text>
+        <text class="s" x="280" y="552" text-anchor="middle">state a hypothesis, then query</text>
+        <text class="s" x="280" y="569" text-anchor="middle">for what would prove it wrong</text>
         <line class="ln" x1="280" y1="578" x2="280" y2="606" marker-end="url(#a2)"></line>
 
         <rect class="box" x="130" y="608" width="300" height="66" rx="9"></rect>
-        <text class="t" x="280" y="634" text-anchor="middle">Did the trail earn it?</text>
-        <text class="s" x="280" y="656" text-anchor="middle">unearned CONFIRMED capped to medium</text>
+        <text class="t" x="280" y="637" text-anchor="middle">Did the trail earn it?</text>
+        <text class="s" x="280" y="659" text-anchor="middle">unearned CONFIRMED is capped</text>
         <line class="ln" x1="280" y1="674" x2="280" y2="700" marker-end="url(#a2)"></line>
 
         <!-- remediation diamond -->
         <path class="box-2" d="M280 702 L400 760 L280 818 L160 760 z"></path>
-        <text class="t" x="280" y="756" text-anchor="middle">Change warranted?</text>
-        <text class="s-dim" x="280" y="775" text-anchor="middle">the agent's call, not a rule</text>
+        <text class="t" x="280" y="758" text-anchor="middle">Change needed?</text>
+        <text class="s" x="280" y="780" text-anchor="middle">the agent's call</text>
 
         <!-- decline branch -->
-        <text class="lbl-warn" x="412" y="752">no</text>
+        <text class="lbl-warn" x="414" y="750">no</text>
         <line class="ln-warn" x1="400" y1="760" x2="556" y2="760" marker-end="url(#a2warn)"></line>
         <rect class="box" x="560" y="728" width="320" height="64" rx="9"></rect>
-        <text class="t" x="580" y="754">no_code_fix — declined</text>
-        <text class="s" x="580" y="776">with the reason, and still verified later</text>
+        <text class="t" x="582" y="756">Declined — no code fix</text>
+        <text class="s" x="582" y="778">the reason is recorded</text>
 
-        <text class="lbl" x="292" y="838">yes</text>
+        <text class="lbl" x="294" y="840">yes</text>
         <line class="ln" x1="280" y1="818" x2="280" y2="850" marker-end="url(#a2)"></line>
 
         <rect class="box" x="130" y="852" width="300" height="66" rx="9"></rect>
-        <text class="t" x="280" y="878" text-anchor="middle">Draft the change</text>
-        <text class="s" x="280" y="900" text-anchor="middle">nothing has left this machine yet</text>
+        <text class="t" x="280" y="881" text-anchor="middle">Draft the change</text>
+        <text class="s" x="280" y="903" text-anchor="middle">nothing has left the machine</text>
         <line class="ln" x1="280" y1="918" x2="280" y2="944" marker-end="url(#a2)"></line>
 
         <!-- the human gate -->
         <rect class="box-acc" x="130" y="946" width="300" height="78" rx="9"></rect>
-        <circle class="glyph" cx="156" cy="972" r="5"></circle>
-        <path class="glyph" d="M148 988 a8 8 0 0 1 16 0 z"></path>
-        <text class="t-acc" x="176" y="977">The one human gate</text>
-        <text class="s" x="150" y="1008">approve · push back · reject</text>
-        <text class="lbl" x="446" y="978">push back re-authors the fix,</text>
-        <text class="lbl" x="446" y="994">it is not an edit form</text>
+        <circle class="glyph" cx="158" cy="972" r="5.5"></circle>
+        <path class="glyph" d="M149 989 a9 9 0 0 1 18 0 z"></path>
+        <text class="t-acc" x="180" y="978">The one human gate</text>
+        <text class="s" x="152" y="1009">approve · push back · reject</text>
+        <text class="lbl" x="450" y="978">push back re-authors the fix —</text>
+        <text class="lbl" x="450" y="996">it is not an edit form</text>
         <line class="ln" x1="280" y1="1024" x2="280" y2="1050" marker-end="url(#a2)"></line>
 
         <rect class="box" x="130" y="1052" width="300" height="62" rx="9"></rect>
-        <text class="t" x="280" y="1078" text-anchor="middle">Branch + pull request</text>
-        <text class="s" x="280" y="1099" text-anchor="middle">never a commit to main</text>
+        <text class="t" x="280" y="1080" text-anchor="middle">Branch + pull request</text>
+        <text class="s" x="280" y="1102" text-anchor="middle">never a commit to main</text>
         <line class="ln" x1="280" y1="1114" x2="280" y2="1148" marker-end="url(#a2)"></line>
 
         <!-- redemption -->
         <rect class="box" x="130" y="1150" width="300" height="76" rx="9"></rect>
-        <text class="t" x="280" y="1176" text-anchor="middle">Did it actually work?</text>
-        <text class="s" x="280" y="1197" text-anchor="middle">re-verified against evidence that</text>
-        <text class="s" x="280" y="1214" text-anchor="middle">did not exist when we concluded</text>
+        <text class="t" x="280" y="1178" text-anchor="middle">Did it actually work?</text>
+        <text class="s" x="280" y="1200" text-anchor="middle">checked against evidence that</text>
+        <text class="s" x="280" y="1217" text-anchor="middle">did not exist at the time</text>
 
         <!-- a decline is verified too -->
         <path class="ln-warn" d="M720 792 L720 1188 L436 1188" marker-end="url(#a2warn)"></path>
-        <text class="lbl-warn" x="732" y="1010">every outcome is checked —</text>
-        <text class="lbl-warn" x="732" y="1026">a refusal is a claim too</text>
+        <text class="lbl-warn" x="736" y="1012">every outcome is checked —</text>
+        <text class="lbl-warn" x="736" y="1030">a refusal is a claim too</text>
 
         <!-- outcomes -->
         <line class="ln" x1="230" y1="1226" x2="200" y2="1256" marker-end="url(#a2)"></line>
         <line class="ln" x1="330" y1="1226" x2="600" y2="1256" marker-end="url(#a2)"></line>
 
-        <rect class="box" x="40" y="1258" width="300" height="56" rx="9"></rect>
-        <text class="t" x="60" y="1284">confirmed</text>
-        <text class="s" x="60" y="1303">the only path that closes an incident</text>
+        <rect class="box" x="40" y="1258" width="300" height="58" rx="9"></rect>
+        <text class="t" x="62" y="1286">Confirmed</text>
+        <text class="s" x="62" y="1306">the only path that closes one</text>
 
-        <rect class="box" x="500" y="1258" width="380" height="56" rx="9"></rect>
-        <text class="t" x="520" y="1284">unresolved</text>
-        <text class="s" x="520" y="1303">stays open — and this fix stops being reused</text>
+        <rect class="box" x="500" y="1258" width="380" height="58" rx="9"></rect>
+        <text class="t" x="522" y="1286">Unresolved</text>
+        <text class="s" x="522" y="1306">stays open — this fix is not reused</text>
 
         <!-- feedback edge -->
-        <path class="ln-dash" d="M880 1286 L936 1286 L936 402 L404 402" marker-end="url(#a2)"></path>
-        <text class="lbl" x="924" y="560" text-anchor="middle" transform="rotate(-90 924 560)">a fix that did not hold is never reused blindly</text>
+        <path class="ln-dash" d="M880 1287 L936 1287 L936 402 L404 402" marker-end="url(#a2)"></path>
+        <text class="lbl" x="922" y="560" text-anchor="middle" transform="rotate(-90 922 560)">a fix that did not hold is never reused blindly</text>
       </svg>
     </div>
 
