@@ -1,0 +1,57 @@
+{
+  "name": "sreoncall",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w packages/api\" \"npm run dev -w packages/web\"",
+    "build": "npm run build -w packages/api && npm run build -w packages/web",
+    "test": "npm run test -w packages/api && npm run test -w packages/web",
+    "lint": "npm run lint -w packages/api && npm run lint -w packages/web"
+  },
+  "overrides": {
+    "shell-quote": "^1.8.4",
+    "minimatch": "^9.0.9",
+    "picomatch": "^4.0.4",
+    "form-data": "^4.0.6",
+    "protobufjs": "^7.6.3",
+    "lodash": "^4.18.1",
+    "undici": "^7.28.0",
+    "markdown-it": "^14.2.0",
+    "js-yaml": "^4.2.0",
+    "qs": "^6.15.2",
+    "ip-address": "^10.2.0",
+    "uuid": "^11.1.1",
+    "gaxios": "^7.1.5",
+    "vite": "^8.0.16",
+    "@grpc/grpc-js": "^1.14.4",
+    "postcss": "^8.5.15",
+    "brace-expansion": "^2.0.3",
+    "flatted": "^3.4.2",
+    "path-to-regexp": "^8.4.2",
+    "tar": "^7.5.16",
+    "next": {
+      "postcss": "^8.5.15"
+    },
+    "router": {
+      "path-to-regexp": "^8.4.2"
+    },
+    "flat-cache": {
+      "flatted": "^3.4.2"
+    }
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/supertest": "^6.0.3",
+    "@vitest/coverage-v8": "^4.1.9",
+    "concurrently": "^9.0.0",
+    "dotenv": "^17.3.1",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
+    "redis": "^5.11.0",
+    "supertest": "^7.2.2",
+    "typescript-eslint": "^8.64.0",
+    "vitest": "^4.1.9"
+  }
+}

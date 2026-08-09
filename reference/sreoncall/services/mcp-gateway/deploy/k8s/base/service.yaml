@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-gateway
+  namespace: sreoncall-mcp
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/part-of: sreoncall-mcp
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mcp-gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

@@ -1,0 +1,40 @@
+# Ask-bar golden cases — the accuracy flywheel (Inc 4).
+#
+# Each case is a natural-language question fed to the LogQL/PromQL generation prompt, with
+# assertions on the generated query. Run manually / nightly against a REAL model (needs a key) —
+# NOT in per-PR CI (cost). See README.md in this dir for how to run and how to add a case.
+#
+# Seeded with the two failure modes demonstrated in review:
+#   1. nested-quote line filter  → must escape correctly (separate |= / != filters)
+#   2. key=value-in-TEXT metric extraction → must use | regexp + | unwrap, NOT | json
+
+tests:
+  - description: "LogQL — nested/dual quotes: contains X but not Y (must be valid, separate filters)"
+    vars:
+      question: 'show me logs from authlog where the message contains "Disconnected from invalid user" but ignore "admin"'
+      lang: logql
+    assert:
+      # the generated LogQL must parse (validated by the same Lezer grammar the API uses)
+      - type: javascript
+        value: file://assert-valid-logql.js
+      # both terms present as line filters; the excluded term via != (not swallowed into a broken quote)
+      - type: contains
+        value: '|= "Disconnected from invalid user"'
+      - type: contains
+        value: '!= "admin"'
+
+  - description: "LogQL — key=value embedded in TEXT: sum a numeric field (must use regexp+unwrap, not json)"
+    vars:
+      question: 'get the memory_rss values from sreoncall-metrics-test and calculate the sum. Log lines look like: sample#memory_rss=28.50MB'
+      lang: logql
+    assert:
+      - type: javascript
+        value: file://assert-valid-logql.js
+      # must extract via a parser suited to k=v-in-text, and unwrap the numeric for aggregation
+      - type: regex
+        value: '\|\s*(regexp|pattern)'
+      - type: contains
+        value: '| unwrap'
+      # must NOT hallucinate the JSON parser on non-JSON text
+      - type: not-contains
+        value: '| json'

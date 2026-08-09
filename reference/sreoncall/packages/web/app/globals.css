@@ -1,0 +1,360 @@
+html {
+  scroll-behavior: smooth;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ─── SREonCall Design System v1.0 ─── */
+
+    /* Brand Orange */
+    --brand: #FF6B2B;
+    --brand-400: #FF8F4F;
+    --brand-600: #E85D1C;
+
+    /* Navy / Dark */
+    --navy-900: #0D1117;
+    --navy-800: #1E3A5F;
+    --navy-surface: #161B22;
+    --navy-elevated: #1E293B;
+    --navy-overlay: #334155;
+
+    /* Semantic */
+    --color-success: #16A34A;
+    --color-warning: #EAB308;
+    --color-error: #DC2626;
+    --color-info: #2563EB;
+    --color-ai: #7C3AED;
+
+    /* Priority */
+    --priority-p1: #DC2626;
+    --priority-p2: #EA580C;
+    --priority-p3: #EAB308;
+    --priority-p4: #2563EB;
+    --priority-p5: #94A3B8;
+
+    /* Tailwind integration (HSL) — Light mode */
+    --background: 210 20% 98%;       /* #F8FAFC */
+    --foreground: 222 47% 11%;       /* #0F172A */
+    --card: 0 0% 100%;               /* #FFFFFF */
+    --card-foreground: 222 47% 11%;  /* #0F172A */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 21 100% 58%;          /* #FF6B2B */
+    --primary-foreground: 0 0% 100%; /* #FFFFFF */
+    --secondary: 215 28% 17%;       /* #0D1117 → navy secondary btn */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 40% 96%;           /* #F1F5F9 */
+    --muted-foreground: 215 16% 47%; /* #64748B */
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;       /* #DC2626 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;          /* #E2E8F0 */
+    --input: 214 32% 91%;
+    --ring: 21 100% 58%;            /* #FF6B2B — orange focus ring */
+    --radius: 0.5rem;
+
+    /* Typography */
+    --font-display: var(--font-geist-sans), system-ui, sans-serif;
+    --font-mono: 'Fira Code', 'Consolas', monospace;
+
+    /* Layout */
+    --sidebar-width: 250px;
+    --topbar-height: 50px;
+
+    /* Shadows */
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.12);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.20);
+  }
+
+  .dark {
+    --background: 215 28% 5%;        /* #0D1117 */
+    --foreground: 214 32% 91%;       /* #E2E8F0 */
+    --card: 216 22% 11%;             /* #161B22 */
+    --card-foreground: 214 32% 91%;
+    --popover: 216 22% 11%;
+    --popover-foreground: 214 32% 91%;
+    --primary: 21 100% 58%;          /* #FF6B2B */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 214 32% 91%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 16% 47%; /* #64748B */
+    --accent: 217 33% 17%;
+    --accent-foreground: 214 32% 91%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 214 32% 91%;
+    --border: 217 33% 17%;          /* #1E293B */
+    --input: 217 33% 17%;
+    --ring: 21 100% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply font-bold leading-tight;
+  }
+  code, pre, .mono {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/20 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/40;
+}
+
+/* ─── Orange dot texture utility ─── */
+.dot-texture-light {
+  background-image: radial-gradient(circle, rgba(255,107,43,0.12) 1.2px, transparent 1.2px);
+  background-size: 12px 12px;
+}
+.dot-texture-dark {
+  background-image: radial-gradient(circle, rgba(255,107,43,0.06) 1.2px, transparent 1.2px);
+  background-size: 12px 12px;
+}
+.grid-overlay {
+  background-image:
+    linear-gradient(rgba(30,41,59,0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30,41,59,0.3) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ─── Skeleton loader ─── */
+.skeleton {
+  background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--border)) 50%, hsl(var(--muted)) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ─── Pulse animation for status dots ─── */
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 2px rgba(220,38,38,0.4); }
+  70%  { box-shadow: 0 0 0 6px rgba(220,38,38,0); }
+  100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
+}
+
+/* ─── Mascot animations ─── */
+@keyframes mascot-float {
+  0%   { transform: translateY(0px); }
+  50%  { transform: translateY(-8px); }
+  100% { transform: translateY(0px); }
+}
+@keyframes mascot-bounce {
+  0%   { transform: translateY(0) scale(1); }
+  30%  { transform: translateY(-12px) scale(1.02); }
+  50%  { transform: translateY(-16px) scale(1.03); }
+  70%  { transform: translateY(-8px) scale(1.01); }
+  100% { transform: translateY(0) scale(1); }
+}
+@keyframes mascot-glow {
+  0%   { filter: drop-shadow(0 0 0px rgba(255,107,43,0)); }
+  50%  { filter: drop-shadow(0 0 12px rgba(255,107,43,0.4)); }
+  100% { filter: drop-shadow(0 0 0px rgba(255,107,43,0)); }
+}
+@keyframes mascot-shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+.animate-mascot-float  { animation: mascot-float  3s ease-in-out infinite; }
+.animate-mascot-bounce { animation: mascot-bounce  0.6s ease-out forwards; }
+.animate-mascot-glow   { animation: mascot-glow   2s ease-in-out infinite; }
+.animate-mascot-shake  { animation: mascot-shake   0.5s ease-in-out; }
+
+/* ─── CodeMirror Query Editor (global — tooltips render in document.body) ─── */
+
+.cm-announced {
+  position: fixed !important;
+  top: -10000px !important;
+}
+
+.cm-editor.cm-focused {
+  outline: none !important;
+}
+
+.cm-content:focus,
+.cm-content:focus-visible {
+  outline: none !important;
+}
+
+.cm-tooltip.cm-tooltip-autocomplete {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background-color: hsl(var(--card));
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  max-width: min(480px, calc(100vw - 32px));
+  z-index: 1100;
+  padding: 4px 0;
+}
+
+.cm-tooltip.cm-tooltip-autocomplete > ul {
+  max-height: 200px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cm-tooltip-autocomplete ul li {
+  padding: 5px 10px;
+  line-height: 1.4;
+  cursor: pointer;
+  color: hsl(var(--foreground));
+  transition: background-color 0.1s;
+}
+
+.cm-tooltip-autocomplete ul li[aria-selected] {
+  background-color: hsl(var(--primary) / 0.08);
+}
+
+.cm-completionLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cm-completionDetail {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+  margin-left: auto;
+  padding-left: 12px;
+  opacity: 0.7;
+}
+
+.cm-completionMatchedText {
+  color: hsl(var(--primary));
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cm-placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+  font-style: italic !important;
+  opacity: 0.5;
+}
+
+/* ─── Role Badges — from design-system-final.svg ─── */
+.role-platform-admin {
+  @apply inline-flex items-center rounded-md px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.03em];
+  background: #0D1117;
+  color: #FF6B2B;
+}
+.role-tenant-admin {
+  @apply inline-flex items-center rounded-md px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.03em];
+  background: #1E3A5F;
+  color: #93C5FD;
+}
+.role-sre-l2 {
+  @apply inline-flex items-center rounded-md border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.03em];
+  background: #FFF7ED;
+  border-color: #FED7AA;
+  color: #C2410C;
+}
+.role-sre-l1 {
+  @apply inline-flex items-center rounded-md border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.03em];
+  background: #FFF3ED;
+  border-color: #FFD6C2;
+  color: #EA580C;
+}
+.role-sre-devops {
+  @apply inline-flex items-center rounded-md border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.03em];
+  background: #EFF6FF;
+  border-color: #BFDBFE;
+  color: #1D4ED8;
+}
+.role-sre-tiger {
+  @apply inline-flex items-center rounded-md border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.03em];
+  background: #FEF2F2;
+  border-color: #FECACA;
+  color: #DC2626;
+}
+
+/* ─── Status dot indicators ─── */
+.status-dot {
+  @apply inline-block h-2 w-2 rounded-full shrink-0;
+}
+.status-dot-operational { background: #16A34A; box-shadow: 0 0 0 2px rgba(22,163,74,0.2); }
+.status-dot-degraded    { background: #EAB308; box-shadow: 0 0 0 2px rgba(234,179,8,0.2); }
+.status-dot-down        { background: #DC2626; box-shadow: 0 0 0 2px rgba(220,38,38,0.2); }
+.status-dot-maintenance { background: #3B82F6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+.status-dot-pulse       { animation: pulse-ring 1.5s ease-out infinite; }
+
+/* ─── Alert/Toast variants ─── */
+.alert-error   { @apply flex items-start gap-3 rounded-lg border px-4 py-3; background: #FEF2F2; border-color: #FECACA; color: #991B1B; }
+.alert-warning { @apply flex items-start gap-3 rounded-lg border px-4 py-3; background: #FFFBEB; border-color: #FDE68A; color: #92400E; }
+.alert-success { @apply flex items-start gap-3 rounded-lg border px-4 py-3; background: #F0FDF4; border-color: #BBF7D0; color: #14532D; }
+.alert-info    { @apply flex items-start gap-3 rounded-lg border px-4 py-3; background: #EFF6FF; border-color: #BFDBFE; color: #1E40AF; }
+
+/* ─── Timeline ─── */
+.timeline-item { @apply relative flex gap-4 pb-5; }
+.timeline-item::before {
+  content: '';
+  @apply absolute bottom-0;
+  left: 11px;
+  top: 24px;
+  width: 2px;
+  background: hsl(var(--border));
+}
+.timeline-item:last-child::before { display: none; }
+.timeline-dot {
+  @apply flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-border bg-card relative z-[1];
+}
+.timeline-dot-active { border-color: #FF6B2B; background: rgba(255,107,43,0.1); }
+
+/* ─── Date input calendar icon alignment ─── */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.5;
+  padding: 2px;
+}
+input[type="date"],
+input[type="datetime-local"] {
+  text-align: left;
+}
+
+/* ─── Spinner ─── */
+.spinner {
+  @apply h-6 w-6 rounded-full border-2 border-border;
+  border-top-color: #FF6B2B;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

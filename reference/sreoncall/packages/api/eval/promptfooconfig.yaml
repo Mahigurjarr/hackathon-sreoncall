@@ -1,0 +1,32 @@
+# promptfoo config for the Ask-bar generation prompt (Inc 4).
+#
+# MANUAL / NIGHTLY ONLY — not per-PR CI (real model calls cost money + need a key).
+#
+# Run:  cd packages/api/eval && OPENAI_API_KEY=sk-... npx promptfoo@latest eval
+# View: npx promptfoo@latest view
+#
+# The prompt below is a standalone copy of OBSERVABILITY_GENERATE_LOGQL_PROMPT's contract for eval
+# purposes. When you change the real prompt in src/services/ai-observability-prompt.ts, mirror the
+# material changes here (or wire a build step to emit it) so the eval tracks production.
+
+prompts:
+  - |
+    You convert a natural-language question into a SINGLE LogQL query for the SREonCall Logs Explorer.
+    Choosing a parser: JSON line -> | json; logfmt -> | logfmt; key=val embedded in TEXT
+    (e.g. "sample#memory_rss=28.50MB") -> | pattern or | regexp "(?P<x>...)" (NOT | json);
+    unstructured -> line filters only. Extract a numeric for aggregation with
+    | regexp "k=(?P<v>[0-9.]+)" | unwrap v  (capture only the number; drop unit suffixes like MB),
+    then sum(sum_over_time(<selector> ... | unwrap v [5m])). If a search term contains a double quote,
+    use a backtick raw string: |= `he said "hi"`.
+    Return ONLY JSON: {"logql":"<one expression>","explanation":"<one sentence>"}.
+
+    Question: {{question}}
+
+providers:
+  - id: openai:gpt-4o
+    config:
+      response_format: { type: json_object }
+      temperature: 0
+
+# Test cases live in ask-bar-golden.yaml.
+tests: file://ask-bar-golden.yaml

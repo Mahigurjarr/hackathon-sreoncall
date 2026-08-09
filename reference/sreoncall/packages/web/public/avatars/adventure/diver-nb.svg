@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <circle cx="60" cy="60" r="60" fill="#FED7AA"/>
+  <!-- wetsuit -->
+  <path d="M38 88 Q38 74 60 70 Q82 74 82 88 L82 120 L38 120Z" fill="#1E293B"/>
+  <!-- wetsuit stripe -->
+  <line x1="38" y1="90" x2="82" y2="90" stroke="#0EA5E9" stroke-width="3"/>
+  <!-- neck -->
+  <rect x="54" y="66" width="12" height="8" rx="3" fill="#D4A574"/>
+  <!-- head -->
+  <circle cx="60" cy="48" r="24" fill="#D4A574"/>
+  <!-- short wavy hair -->
+  <path d="M38 44 Q38 26 60 24 Q82 26 82 44 Q78 30 60 28 Q42 30 38 44Z" fill="#5B3A1E"/>
+  <path d="M42 32 Q46 28 50 32" stroke="#5B3A1E" stroke-width="3" fill="none"/>
+  <path d="M54 28 Q58 24 62 28" stroke="#5B3A1E" stroke-width="3" fill="none"/>
+  <path d="M66 30 Q70 26 74 30" stroke="#5B3A1E" stroke-width="3" fill="none"/>
+  <!-- dive mask -->
+  <path d="M40 42 Q40 38 60 36 Q80 38 80 42 L80 52 Q80 56 60 58 Q40 56 40 52Z" fill="#0EA5E9" fill-opacity="0.2" stroke="#334155" stroke-width="2"/>
+  <!-- mask strap -->
+  <line x1="36" y1="46" x2="40" y2="46" stroke="#334155" stroke-width="2"/>
+  <line x1="80" y1="46" x2="84" y2="46" stroke="#334155" stroke-width="2"/>
+  <!-- eyes behind mask -->
+  <circle cx="52" cy="47" r="2.5" fill="#1E293B"/>
+  <circle cx="68" cy="47" r="2.5" fill="#1E293B"/>
+  <!-- smile -->
+  <path d="M52 56 Q60 62 68 56" stroke="#1E293B" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- bubbles -->
+  <circle cx="88" cy="40" r="4" fill="#38BDF8" fill-opacity="0.4"/>
+  <circle cx="94" cy="30" r="3" fill="#38BDF8" fill-opacity="0.3"/>
+  <circle cx="90" cy="22" r="2" fill="#38BDF8" fill-opacity="0.2"/>
+</svg>

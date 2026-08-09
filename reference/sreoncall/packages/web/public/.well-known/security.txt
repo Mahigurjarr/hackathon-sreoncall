@@ -1,0 +1,5 @@
+Contact: mailto:security@sreoncall.com
+Expires: 2027-04-20T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://sreoncall.com/.well-known/security.txt
+Policy: https://sreoncall.com/privacy

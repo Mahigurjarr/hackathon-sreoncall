@@ -1,0 +1,10 @@
+User-agent: *
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /admin/
+Disallow: /partner/
+Disallow: /accept-invite
+Disallow: /reset-password
+Disallow: /settings/
+
+Sitemap: https://sreoncall.com/sitemap.xml

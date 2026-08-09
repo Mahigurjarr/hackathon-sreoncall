@@ -1,0 +1,7 @@
+# You'll be pushing to a PUBLIC repo — this file exists specifically so your
+# API key never ends up there by accident. Do not remove the .env line below.
+.env
+.env.local
+.env.*.local
+node_modules/
+.DS_Store

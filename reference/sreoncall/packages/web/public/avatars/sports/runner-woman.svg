@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <circle cx="60" cy="60" r="60" fill="#D1FAE5"/>
+  <!-- athletic top -->
+  <path d="M38 88 Q38 74 60 70 Q82 74 82 88 L82 120 L38 120Z" fill="#EF4444"/>
+  <!-- neck -->
+  <rect x="54" y="66" width="12" height="8" rx="3" fill="#8D6040"/>
+  <!-- head -->
+  <circle cx="60" cy="48" r="24" fill="#8D6040"/>
+  <!-- hair - tight bun -->
+  <path d="M38 42 Q38 26 60 24 Q82 26 82 42 Q78 30 60 28 Q42 30 38 42Z" fill="#1A1A1A"/>
+  <circle cx="60" cy="24" r="8" fill="#1A1A1A"/>
+  <!-- headband -->
+  <path d="M36 38 Q36 34 60 32 Q84 34 84 38" stroke="#EF4444" stroke-width="4" fill="none"/>
+  <!-- eyes -->
+  <circle cx="52" cy="46" r="2.5" fill="#1E293B"/>
+  <circle cx="68" cy="46" r="2.5" fill="#1E293B"/>
+  <!-- determined smile -->
+  <path d="M52 55 Q60 60 68 55" stroke="#1E293B" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- race number -->
+  <rect x="48" y="80" width="24" height="14" rx="1" fill="white"/>
+  <line x1="54" y1="86" x2="66" y2="86" stroke="#1E293B" stroke-width="2"/>
+  <line x1="56" y1="90" x2="64" y2="90" stroke="#1E293B" stroke-width="1"/>
+</svg>

@@ -1,0 +1,80 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+.next/
+out/
+build/
+*.tsbuildinfo
+CLAUDE.md
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test
+coverage/
+.claude/reports/
+.claude/playwright/
+
+# Local Claude Code artifacts — never commit. Playwright traces under
+# .claude/reports/ have leaked credentials in the past; scheduled task
+# lock is per-checkout local state.
+.claude/reports/
+.claude/scheduled_tasks.lock
+
+# Deployment
+sreoncall-logs/
+sreoncall-infra/group_vars/*/vault.yml
+
+# Secrets
+*.pem
+*.key
+
+# Junk files from failed Ansible runs
+sreoncall-infra/--timeout
+sreoncall-infra/-e
+sreoncall-infra/-i
+sreoncall-infra/-v
+sreoncall-infra/180
+sreoncall-infra/EXIT CODE: *
+sreoncall-infra/ansible-playbook
+sreoncall-infra/echo
+sreoncall-infra/enable_*
+sreoncall-infra/environment=*
+sreoncall-infra/inventory/group_vars
+.worktrees/
+Sreoncall
+sreoncall demo
+
+# Local rollout notes
+slack-incident-ingestion-change-log.md
+
+# Architecture / internal docs (local reference only)
+architecture-aisummary.md
+.superpowers/
+
+tests/
+regress_test.sh
+
+# Daily engineering post skill output
+.daily-engineering-posts/
+ 

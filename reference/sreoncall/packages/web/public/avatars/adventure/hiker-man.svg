@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <circle cx="60" cy="60" r="60" fill="#FFE4C4"/>
+  <!-- jacket -->
+  <path d="M38 88 Q38 74 60 70 Q82 74 82 88 L82 120 L38 120Z" fill="#16A34A"/>
+  <!-- zipper -->
+  <line x1="60" y1="72" x2="60" y2="110" stroke="#15803D" stroke-width="2"/>
+  <!-- neck -->
+  <rect x="54" y="66" width="12" height="8" rx="3" fill="#8D6040"/>
+  <!-- head -->
+  <circle cx="60" cy="48" r="24" fill="#8D6040"/>
+  <!-- short curly hair -->
+  <circle cx="44" cy="32" r="6" fill="#1A1A1A"/>
+  <circle cx="54" cy="28" r="7" fill="#1A1A1A"/>
+  <circle cx="66" cy="28" r="7" fill="#1A1A1A"/>
+  <circle cx="76" cy="32" r="6" fill="#1A1A1A"/>
+  <circle cx="50" cy="34" r="5" fill="#1A1A1A"/>
+  <circle cx="70" cy="34" r="5" fill="#1A1A1A"/>
+  <!-- bucket hat -->
+  <path d="M30 40 L90 40 L86 36 Q86 22 60 20 Q34 22 34 36Z" fill="#D4A574"/>
+  <path d="M28 40 Q28 42 30 44 L90 44 Q92 42 92 40Z" fill="#B8835A"/>
+  <!-- eyes -->
+  <circle cx="52" cy="47" r="2.5" fill="#1E293B"/>
+  <circle cx="68" cy="47" r="2.5" fill="#1E293B"/>
+  <!-- smile -->
+  <path d="M52 56 Q60 62 68 56" stroke="#1E293B" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- backpack strap -->
+  <line x1="42" y1="76" x2="38" y2="96" stroke="#854D0E" stroke-width="4" stroke-linecap="round"/>
+  <line x1="78" y1="76" x2="82" y2="96" stroke="#854D0E" stroke-width="4" stroke-linecap="round"/>
+</svg>

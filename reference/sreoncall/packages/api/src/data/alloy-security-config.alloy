@@ -1,0 +1,220 @@
+// =============================================================================
+// SREonCall — Grafana Alloy Security Monitoring Configuration
+// =============================================================================
+//
+// PURPOSE:
+//   This is an optional, additive configuration file for Grafana Alloy that
+//   enables security-focused telemetry collection on tenant hosts. It ships
+//   security-relevant metrics and logs to the SREonCall LGTM stack, where they
+//   are consumed by the built-in security alert templates.
+//
+// WHAT THIS CONFIG COLLECTS:
+//   - Per-process CPU/memory metrics (process exporter) with focus on known
+//     cryptominer process names and executables running from temp directories
+//   - File presence in suspicious staging directories (/tmp, /var/tmp, /dev/shm)
+//   - SSH authentication events, sudo usage, and crontab changes from auth.log
+//   - Kernel module loads and systemd service events from syslog
+//   - Outbound TCP connections, listening ports, and temp-directory executables
+//     via a companion textfile-collector script (see scripts/conntrack-metrics.sh)
+//
+// HOW TO USE:
+//   Option A — Single config directory (recommended):
+//     Place this file alongside your existing Alloy config files. Alloy
+//     automatically merges all *.alloy files in its config directory:
+//       /etc/alloy/config.alloy          (your existing config)
+//       /etc/alloy/security.alloy        (this file)
+//
+//   Option B — Explicit import:
+//     If you use a single-file Alloy config, append the contents of this file
+//     to your existing config, or use the `import.file` block:
+//       import.file "security" {
+//         filename = "/etc/alloy/security.alloy"
+//       }
+//
+// PREREQUISITES:
+//   1. A `loki.write` component named "default" must be defined in your base
+//      config (this file forwards logs to loki.write.default.receiver).
+//   2. A `prometheus.remote_write` component named "default" must be defined
+//      in your base config for process metrics to be forwarded.
+//   3. For network connection tracking metrics, install the companion script
+//      as a cron job (see Section 5 below and scripts/conntrack-metrics.sh).
+//   4. node_exporter must be running with --collector.textfile.directory set
+//      to /var/lib/node_exporter/textfile for textfile metrics to be scraped.
+//
+// NOTE:
+//   This config is safe to deploy on any Linux host running Grafana Alloy v1.x
+//   or later. All components use standard Alloy built-ins — no plugins required.
+//   Log paths assume a Debian/Ubuntu host; adjust for RHEL/CentOS if needed
+//   (/var/log/secure instead of /var/log/auth.log).
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// Section 1 — Process Exporter
+// Collects per-process CPU and memory metrics for security visibility.
+// Flags known cryptominer process names and processes executing from temp dirs.
+// -----------------------------------------------------------------------------
+
+prometheus.exporter.process "security" {
+  matcher {
+    // Track known cryptominer process names
+    name    = "{{.Comm}}"
+    cmdline = [
+      ".*xmrig.*",
+      ".*minerd.*",
+      ".*cpuminer.*",
+      ".*cgminer.*",
+      ".*bfgminer.*",
+      ".*ethminer.*",
+      ".*cryptonight.*",
+      ".*stratum.*",
+    ]
+  }
+
+  matcher {
+    // Track all processes executing from common malware staging directories
+    cmdline = [
+      ".*/tmp/.*",
+      ".*/var/tmp/.*",
+      ".*/dev/shm/.*",
+    ]
+  }
+}
+
+prometheus.scrape "process_security" {
+  targets    = prometheus.exporter.process.security.targets
+  forward_to = [prometheus.remote_write.default.receiver]
+
+  scrape_interval = "30s"
+  job_name        = "process-security"
+}
+
+
+// -----------------------------------------------------------------------------
+// Section 2 — File Integrity Monitoring (FIM)
+// Watches for new or modified files in directories commonly used as malware
+// staging areas. Presence of files here is surfaced via Loki log entries.
+// -----------------------------------------------------------------------------
+
+// File integrity monitoring for common malware paths
+local.file_match "security_fim" {
+  path_targets = [
+    {__path__ = "/tmp/*",      job = "fim", location = "tmp"},
+    {__path__ = "/var/tmp/*",  job = "fim", location = "var_tmp"},
+    {__path__ = "/dev/shm/*",  job = "fim", location = "dev_shm"},
+  ]
+}
+
+loki.source.file "security_fim" {
+  targets    = local.file_match.security_fim.targets
+  forward_to = [loki.write.default.receiver]
+}
+
+
+// -----------------------------------------------------------------------------
+// Section 3 — Auth Log Collection
+// Collects SSH authentication failures, invalid user attempts, sudo commands,
+// crontab modifications, and session open/close events from /var/log/auth.log.
+// Lines are filtered to only forward security-relevant events to Loki.
+// -----------------------------------------------------------------------------
+
+// Auth log for security events
+local.file_match "auth_log" {
+  path_targets = [{
+    __path__ = "/var/log/auth.log",
+    job       = "authlog",
+  }]
+}
+
+loki.source.file "auth_log" {
+  targets    = local.file_match.auth_log.targets
+  forward_to = [loki.process.security_filter.receiver]
+}
+
+// Filter for security-relevant log lines only
+loki.process "security_filter" {
+  stage.match {
+    selector = "{job=\"authlog\"}"
+    stages = [
+      stage.regex {
+        expression = "(?P<event>Failed password|Invalid user|sudo:|crontab|session opened|session closed|Accepted publickey|Accepted password)"
+      },
+      stage.labels {
+        values = { event = "" }
+      },
+    ]
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+
+// -----------------------------------------------------------------------------
+// Section 4 — Syslog Collection
+// Collects kernel module load events, insmod/modprobe calls, crontab changes,
+// and systemd service start/stop events from /var/log/syslog.
+// Unexpected kernel module loads and new services are key indicators of
+// rootkit installation or persistence mechanisms.
+// -----------------------------------------------------------------------------
+
+// Syslog for kernel and systemd security events
+local.file_match "syslog" {
+  path_targets = [{
+    __path__ = "/var/log/syslog",
+    job       = "syslog",
+  }]
+}
+
+loki.source.file "syslog" {
+  targets    = local.file_match.syslog.targets
+  forward_to = [loki.process.syslog_security.receiver]
+}
+
+loki.process "syslog_security" {
+  stage.match {
+    selector = "{job=\"syslog\"}"
+    stages = [
+      stage.regex {
+        expression = "(?P<event>module.*loaded|insmod|modprobe|crontab|systemd.*Started|systemd.*Stopped)"
+      },
+      stage.labels {
+        values = { event = "" }
+      },
+    ]
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+
+// -----------------------------------------------------------------------------
+// Section 5 — Network Connection Tracking (textfile collector)
+// Outbound TCP connection counts, listening port totals, and temp-directory
+// executable counts are gathered by a companion shell script and exposed via
+// node_exporter's textfile collector mechanism.
+//
+// SETUP REQUIRED — install the companion script as a cron job:
+//
+//   sudo cp scripts/conntrack-metrics.sh /opt/sreoncall-agent/scripts/
+//   sudo chmod +x /opt/sreoncall-agent/scripts/conntrack-metrics.sh
+//   sudo mkdir -p /var/lib/node_exporter/textfile
+//
+//   Add to /etc/cron.d/sreoncall-security:
+//     * * * * * root /opt/sreoncall-agent/scripts/conntrack-metrics.sh > \
+//                    /var/lib/node_exporter/textfile/conntrack.prom
+//
+// Metrics produced by the script:
+//   sreoncall_outbound_connections{dest_port="<port>"}  — active outbound TCP
+//                                                         connections per port
+//   sreoncall_listening_ports_total                     — total listening ports
+//   sreoncall_tmp_executables_total                     — executables in /tmp,
+//                                                         /var/tmp, /dev/shm
+//   sreoncall_user_crontab_entries                      — non-root crontab entries
+//   sreoncall_cryptominer_detected                      — 1 if a known cryptominer
+//                                                         process is running
+//
+// node_exporter scraping of the textfile directory is handled by your base
+// Alloy config's prometheus.exporter.unix or prometheus.scrape component.
+// Ensure node_exporter is started with:
+//   --collector.textfile.directory=/var/lib/node_exporter/textfile
+// -----------------------------------------------------------------------------

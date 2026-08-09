@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <circle cx="60" cy="60" r="60" fill="#FBCFE8"/>
+  <!-- chef jacket -->
+  <path d="M38 88 Q38 74 60 70 Q82 74 82 88 L82 120 L38 120Z" fill="white"/>
+  <!-- double-breasted buttons -->
+  <circle cx="52" cy="84" r="2" fill="#1E293B"/>
+  <circle cx="52" cy="92" r="2" fill="#1E293B"/>
+  <circle cx="68" cy="84" r="2" fill="#1E293B"/>
+  <circle cx="68" cy="92" r="2" fill="#1E293B"/>
+  <!-- kerchief -->
+  <path d="M50 72 L60 80 L70 72" fill="#DC2626"/>
+  <!-- neck -->
+  <rect x="54" y="66" width="12" height="8" rx="3" fill="#D4A574"/>
+  <!-- head -->
+  <circle cx="60" cy="48" r="24" fill="#D4A574"/>
+  <!-- short styled hair peeks -->
+  <path d="M40 40 Q40 34 46 34" fill="#4A2800"/>
+  <path d="M80 40 Q80 34 74 34" fill="#4A2800"/>
+  <!-- chef hat (toque) -->
+  <path d="M40 36 Q40 8 60 8 Q80 8 80 36 L40 36Z" fill="white"/>
+  <rect x="38" y="34" width="44" height="6" rx="1" fill="#F1F5F9"/>
+  <!-- hat poof -->
+  <circle cx="48" cy="14" r="10" fill="white"/>
+  <circle cx="60" cy="10" r="12" fill="white"/>
+  <circle cx="72" cy="14" r="10" fill="white"/>
+  <!-- eyes -->
+  <circle cx="52" cy="46" r="2.5" fill="#1E293B"/>
+  <circle cx="68" cy="46" r="2.5" fill="#1E293B"/>
+  <!-- warm smile -->
+  <path d="M52 56 Q60 62 68 56" stroke="#1E293B" stroke-width="2" stroke-linecap="round" fill="none"/>
+</svg>

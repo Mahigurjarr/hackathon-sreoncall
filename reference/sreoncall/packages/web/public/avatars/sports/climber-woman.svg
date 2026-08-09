@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <circle cx="60" cy="60" r="60" fill="#D5F5E3"/>
+  <!-- tank top -->
+  <path d="M42 88 Q42 74 60 70 Q78 74 78 88 L78 120 L42 120Z" fill="#8B5CF6"/>
+  <!-- chalk marks on shirt -->
+  <circle cx="52" cy="90" r="3" fill="#E2E8F0" fill-opacity="0.5"/>
+  <circle cx="68" cy="86" r="2" fill="#E2E8F0" fill-opacity="0.5"/>
+  <!-- neck -->
+  <rect x="54" y="66" width="12" height="8" rx="3" fill="#FDDCB5"/>
+  <!-- head -->
+  <circle cx="60" cy="48" r="24" fill="#FDDCB5"/>
+  <!-- messy bun hair -->
+  <path d="M38 44 Q38 26 60 24 Q82 26 82 44 Q78 30 60 28 Q42 30 38 44Z" fill="#C2410C"/>
+  <circle cx="60" cy="22" r="10" fill="#C2410C"/>
+  <circle cx="54" cy="20" r="4" fill="#C2410C"/>
+  <circle cx="66" cy="18" r="4" fill="#C2410C"/>
+  <!-- eyes -->
+  <circle cx="52" cy="46" r="2.5" fill="#1E293B"/>
+  <circle cx="68" cy="46" r="2.5" fill="#1E293B"/>
+  <!-- determined grin -->
+  <path d="M50 55 Q60 63 70 55" stroke="#1E293B" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- carabiner -->
+  <path d="M86 78 Q92 78 92 86 Q92 94 86 94 Q80 94 80 86" stroke="#9CA3AF" stroke-width="3" fill="none"/>
+  <line x1="86" y1="78" x2="86" y2="82" stroke="#D97706" stroke-width="3" stroke-linecap="round"/>
+  <!-- chalk bag strap -->
+  <line x1="78" y1="88" x2="86" y2="86" stroke="#6B7280" stroke-width="2"/>
+</svg>

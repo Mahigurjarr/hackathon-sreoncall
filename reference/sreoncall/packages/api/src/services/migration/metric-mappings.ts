@@ -1,0 +1,113 @@
+// Datadog metric -> PromQL metric mapping
+export const DATADOG_METRIC_MAP: Record<string, string> = {
+  'system.cpu.user': 'node_cpu_seconds_total{mode="user"}',
+  'system.cpu.system': 'node_cpu_seconds_total{mode="system"}',
+  'system.cpu.idle': 'node_cpu_seconds_total{mode="idle"}',
+  'system.mem.used': '(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)',
+  'system.mem.free': 'node_memory_MemAvailable_bytes',
+  'system.disk.used': '(node_filesystem_size_bytes - node_filesystem_avail_bytes)',
+  'system.load.1': 'node_load1',
+  'system.load.5': 'node_load5',
+  'system.net.bytes_rcvd': 'node_network_receive_bytes_total',
+  'system.net.bytes_sent': 'node_network_transmit_bytes_total',
+  'docker.cpu.usage': 'container_cpu_usage_seconds_total',
+  'docker.mem.rss': 'container_memory_rss',
+  'kubernetes.cpu.usage': 'container_cpu_usage_seconds_total',
+  'kubernetes.memory.usage': 'container_memory_working_set_bytes',
+  'http.requests': 'http_server_request_duration_seconds_count',
+  'http.request.duration': 'http_server_request_duration_seconds',
+  'trace.http.request.errors': 'http_server_request_duration_seconds_count{http_response_status_code=~"5.."}',
+};
+
+// New Relic event type -> PromQL metric mapping
+export const NEWRELIC_METRIC_MAP: Record<string, string> = {
+  'Transaction': 'http_server_request_duration_seconds',
+  'TransactionError': 'http_server_request_duration_seconds_count{http_response_status_code=~"5.."}',
+  'SystemSample': 'node_cpu_seconds_total',
+  'ProcessSample': 'process_cpu_seconds_total',
+  'NetworkSample': 'node_network_receive_bytes_total',
+  'ContainerSample': 'container_cpu_usage_seconds_total',
+};
+
+// Panel type mappings
+export const GRAFANA_PANEL_MAP: Record<string, string> = {
+  'timeseries': 'line_chart',
+  'graph': 'line_chart',
+  'barchart': 'bar_chart',
+  'bargauge': 'bar_chart',
+  'gauge': 'gauge',
+  'stat': 'stat',
+  'table': 'table',
+  'heatmap': 'heatmap',
+  'logs': 'log_viewer',
+  'traces': 'trace_waterfall',
+};
+
+export const DATADOG_WIDGET_MAP: Record<string, string> = {
+  'timeseries': 'line_chart',
+  'query_value': 'stat',
+  'toplist': 'table',
+  'heatmap': 'heatmap',
+  'table': 'table',
+  'distribution': 'bar_chart',
+};
+
+// Groundcover metric -> standard Prometheus/kube-state-metrics equivalent
+export const GROUNDCOVER_METRIC_MAP: Record<string, string> = {
+  'groundcover_container_cpu_request_m_cpu': 'kube_pod_container_resource_requests{resource="cpu"}',
+  'groundcover_container_cpu_usage_rate_millis': 'rate(container_cpu_usage_seconds_total[5m]) * 1000',
+  'groundcover_container_memory_request_bytes': 'kube_pod_container_resource_requests{resource="memory"}',
+  'groundcover_container_memory_usage_bytes': 'container_memory_working_set_bytes',
+  'groundcover_kube_node_status_allocatable': 'kube_node_status_allocatable',
+  'groundcover_kube_node_status_capacity': 'kube_node_status_capacity',
+  'groundcover_node_rt_cpu_usage_percent': '100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)',
+  'groundcover_node_rt_memory_usage_percent': '(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100',
+  'groundcover_node_rt_disk_space_used_percent': '(1 - node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100',
+  'groundcover_node_network_receive_bytes_total': 'node_network_receive_bytes_total',
+  'groundcover_node_network_transmit_bytes_total': 'node_network_transmit_bytes_total',
+  'groundcover_node_disk_read_bytes_total': 'node_disk_read_bytes_total',
+  'groundcover_node_disk_written_bytes_total': 'node_disk_written_bytes_total',
+  'groundcover_kube_pod_status_phase': 'kube_pod_status_phase',
+  'groundcover_kube_pod_container_status_restarts_total': 'kube_pod_container_status_restarts_total',
+  'groundcover_kube_pod_container_status_waiting_reason': 'kube_pod_container_status_waiting_reason',
+  'groundcover_kube_pod_container_status_terminated_reason': 'kube_pod_container_status_terminated_reason',
+  'groundcover_kube_deployment_status_replicas': 'kube_deployment_status_replicas',
+  'groundcover_kube_deployment_status_replicas_available': 'kube_deployment_status_replicas_available',
+  'groundcover_kube_deployment_status_replicas_unavailable': 'kube_deployment_status_replicas_unavailable',
+  'groundcover_kube_deployment_status_replicas_updated': 'kube_deployment_status_replicas_updated',
+  'groundcover_kube_deployment_spec_replicas': 'kube_deployment_spec_replicas',
+  'groundcover_kube_daemonset_status_desired_number_scheduled': 'kube_daemonset_status_desired_number_scheduled',
+  'groundcover_kube_daemonset_status_number_ready': 'kube_daemonset_status_number_ready',
+  'groundcover_kube_daemonset_status_number_misscheduled': 'kube_daemonset_status_number_misscheduled',
+  'groundcover_kube_daemonset_status_current_number_scheduled': 'kube_daemonset_status_current_number_scheduled',
+  'groundcover_kube_statefulset_status_replicas': 'kube_statefulset_status_replicas',
+  'groundcover_kube_statefulset_status_replicas_ready': 'kube_statefulset_status_replicas_ready',
+  'groundcover_kube_statefulset_status_replicas_updated': 'kube_statefulset_status_replicas_updated',
+  'groundcover_kube_statefulset_replicas': 'kube_statefulset_replicas',
+  'groundcover_kube_replicaset_spec_replicas': 'kube_replicaset_spec_replicas',
+  'groundcover_kube_replicaset_status_replicas': 'kube_replicaset_status_replicas',
+  'groundcover_kube_replicaset_status_ready_replicas': 'kube_replicaset_status_ready_replicas',
+  'groundcover_kube_job_status_succeeded': 'kube_job_status_succeeded',
+  'groundcover_kube_job_status_failed': 'kube_job_status_failed',
+  'groundcover_kube_job_status_active': 'kube_job_status_active',
+  'groundcover_kube_node_status_condition': 'kube_node_status_condition',
+  'groundcover_kube_service_info': 'kube_service_info',
+  'groundcover_kube_namespace_status_phase': 'kube_namespace_status_phase',
+};
+
+export const GROUNDCOVER_WIDGET_MAP: Record<string, string> = {
+  'line': 'line_chart',
+  'area': 'line_chart',
+  'bar': 'bar_chart',
+  'stat': 'stat',
+  'gauge': 'gauge',
+  'table': 'table',
+  'heatmap': 'heatmap',
+  'logs': 'log_viewer',
+  'traces': 'trace_waterfall',
+  'timeseries': 'line_chart',
+  'piechart': 'bar_chart',
+  'widget': 'line_chart',
+  'section': 'stat',
+  'text': 'stat',
+};

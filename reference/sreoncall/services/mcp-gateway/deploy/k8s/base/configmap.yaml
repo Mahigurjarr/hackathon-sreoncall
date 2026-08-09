@@ -1,0 +1,19 @@
+# No Secret exists for this service (yet) — the gateway holds no credentials
+# of its own. It relays each caller's tenant API key straight through to Node
+# on every request rather than storing one; see app/main.py. If that changes
+# (e.g. a shared internal token for the upstream hop), add a Secret alongside
+# this ConfigMap and follow the delete-to-rotate contract used elsewhere in
+# this workspace (see alygrp-core/deploy/k8s/base/secrets/README.md).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-gateway-config
+  namespace: sreoncall-mcp
+  labels:
+    app.kubernetes.io/part-of: sreoncall-mcp
+data:
+  SREONCALL_API_URL: "http://10.10.1.22:8000"
+  UPSTREAM_TIMEOUT_SECONDS: "30"
+  UPSTREAM_CONNECT_TIMEOUT_SECONDS: "5"
+  RATE_LIMIT_CAPACITY: "30"
+  RATE_LIMIT_REFILL_PER_SECOND: "0.5"

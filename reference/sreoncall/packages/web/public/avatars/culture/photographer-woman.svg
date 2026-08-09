@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <circle cx="60" cy="60" r="60" fill="#FFE0EC"/>
+  <!-- jacket -->
+  <path d="M38 88 Q38 74 60 70 Q82 74 82 88 L82 120 L38 120Z" fill="#1E293B"/>
+  <!-- scarf -->
+  <path d="M50 72 Q60 78 70 72 L68 84 L52 84Z" fill="#F59E0B"/>
+  <!-- neck -->
+  <rect x="54" y="66" width="12" height="8" rx="3" fill="#8D6040"/>
+  <!-- head -->
+  <circle cx="60" cy="48" r="24" fill="#8D6040"/>
+  <!-- locs/braids -->
+  <path d="M38 44 Q38 26 60 24 Q82 26 82 44" fill="#1A1A1A"/>
+  <rect x="36" y="40" width="5" height="24" rx="2.5" fill="#1A1A1A"/>
+  <rect x="43" y="38" width="5" height="28" rx="2.5" fill="#1A1A1A"/>
+  <rect x="72" y="38" width="5" height="28" rx="2.5" fill="#1A1A1A"/>
+  <rect x="79" y="40" width="5" height="24" rx="2.5" fill="#1A1A1A"/>
+  <!-- hair beads -->
+  <circle cx="38" cy="66" r="2" fill="#FBBF24"/>
+  <circle cx="45" cy="68" r="2" fill="#EF4444"/>
+  <circle cx="74" cy="68" r="2" fill="#22C55E"/>
+  <circle cx="81" cy="66" r="2" fill="#3B82F6"/>
+  <!-- eyes -->
+  <circle cx="52" cy="46" r="2.5" fill="#1E293B"/>
+  <circle cx="68" cy="46" r="2.5" fill="#1E293B"/>
+  <!-- smile -->
+  <path d="M52 55 Q60 61 68 55" stroke="#1E293B" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- camera -->
+  <rect x="44" y="90" width="32" height="22" rx="4" fill="#374151"/>
+  <circle cx="60" cy="100" r="8" fill="#1E293B"/>
+  <circle cx="60" cy="100" r="5" fill="#475569"/>
+  <circle cx="60" cy="100" r="2" fill="#0EA5E9"/>
+  <!-- flash -->
+  <rect x="68" y="88" width="8" height="4" rx="1" fill="#6B7280"/>
+  <!-- camera strap -->
+  <path d="M44 92 Q38 88 36 80" stroke="#854D0E" stroke-width="3" fill="none"/>
+  <path d="M76 92 Q82 88 84 80" stroke="#854D0E" stroke-width="3" fill="none"/>
+</svg>

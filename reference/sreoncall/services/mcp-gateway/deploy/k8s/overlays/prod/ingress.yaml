@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp-gateway
+  namespace: sreoncall-mcp
+  labels:
+    app.kubernetes.io/part-of: sreoncall-mcp
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  # No `tls:` block / cert-manager annotation here — unlike alygrp-core,
+  # this domain's TLS is terminated at the shared nginx reverse proxy
+  # (10.10.1.99, real Let's Encrypt cert already issued via alygrp-ingress),
+  # which forwards plain HTTP to this cluster. A cert-manager annotation here
+  # would spin up a redundant ACME HTTP-01 solver pod for a cert nothing uses.
+  ingressClassName: traefik
+  rules:
+    - host: mcp.sreoncall.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-gateway
+                port:
+                  number: 80

@@ -1,0 +1,47 @@
+# sreoncall-mcp is the first SREonCall workload on a cluster that already
+# runs unrelated apps (alygrp-core and others) — without this, any pod
+# anywhere on the cluster can reach this gateway (or it can reach them),
+# depending on the CNI's default posture. Traefik (the cluster's ingress
+# controller) runs in kube-system, so ingress is scoped to that namespace;
+# egress is scoped to DNS and the one upstream this gateway ever calls.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-gateway
+  namespace: sreoncall-mcp
+  labels:
+    app.kubernetes.io/part-of: sreoncall-mcp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # The Node API this gateway relays every /mcp request to (see
+    # SREONCALL_API_URL in configmap.yaml — keep this in sync if that host
+    # changes).
+    - to:
+        - ipBlock:
+            cidr: 10.10.1.22/32
+      ports:
+        - protocol: TCP
+          port: 8000

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <circle cx="60" cy="60" r="60" fill="#CFFAFE"/>
+  <!-- swimsuit -->
+  <path d="M38 88 Q38 74 60 70 Q82 74 82 88 L82 120 L38 120Z" fill="#0EA5E9"/>
+  <!-- neck -->
+  <rect x="54" y="66" width="12" height="8" rx="3" fill="#E8B88A"/>
+  <!-- head -->
+  <circle cx="60" cy="48" r="24" fill="#E8B88A"/>
+  <!-- swim cap -->
+  <path d="M36 48 Q36 22 60 20 Q84 22 84 48 Q82 44 60 42 Q38 44 36 48Z" fill="#6366F1"/>
+  <path d="M36 48 Q36 46 38 44" stroke="#6366F1" stroke-width="2"/>
+  <path d="M84 48 Q84 46 82 44" stroke="#6366F1" stroke-width="2"/>
+  <!-- goggles -->
+  <ellipse cx="50" cy="46" rx="8" ry="6" stroke="#1E293B" stroke-width="2" fill="#38BDF8" fill-opacity="0.3"/>
+  <ellipse cx="70" cy="46" rx="8" ry="6" stroke="#1E293B" stroke-width="2" fill="#38BDF8" fill-opacity="0.3"/>
+  <line x1="58" y1="46" x2="62" y2="46" stroke="#1E293B" stroke-width="2"/>
+  <!-- eyes behind goggles -->
+  <circle cx="50" cy="46" r="2" fill="#1E293B"/>
+  <circle cx="70" cy="46" r="2" fill="#1E293B"/>
+  <!-- smile -->
+  <path d="M52 56 Q60 62 68 56" stroke="#1E293B" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- water waves at bottom -->
+  <path d="M20 108 Q30 102 40 108 Q50 114 60 108 Q70 102 80 108 Q90 114 100 108" stroke="#38BDF8" stroke-width="3" fill="none"/>
+</svg>
