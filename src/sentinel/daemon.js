@@ -17,6 +17,7 @@ const { recall, priorArtBlock } = require("../memory/recall");
 const { probeFleet } = require("../lgtm/health");
 const { explainFleet } = require("../actions/explain");
 const { scheduleRedemption, runRedemptionChecks } = require("../actions/redemption");
+const policy = require("../investigator/policy");
 
 // A recalled diagnosis still gets verified live, but it does not need the full search that
 // produced it the first time — the hypothesis is already on the table, so the remaining work
@@ -26,12 +27,11 @@ const VERIFY_TURNS = 4;
 const DEFAULT_INTERVAL_MS = Number(process.env.SRE_SWEEP_INTERVAL_MS) || 45000;
 const TERMINAL_STATUSES = new Set(["resolved", "closed", "mitigated"]);
 
+// Thin wrapper kept for anything still calling daemon.js's own deriveConfidence expecting a
+// bare string — the real judgement, including whether the trail EARNED that confidence, now
+// lives in src/investigator/policy.js (the explicit policy layer malleability was missing).
 function deriveConfidence(hypothesisHistory) {
-  if (!hypothesisHistory.length) return "low";
-  const last = hypothesisHistory[hypothesisHistory.length - 1];
-  if (last.status === "CONFIRMED") return "high";
-  if (last.status === "DISCONFIRMED") return "low";
-  return "medium"; // NEW or REVISED with no further confirming attempt captured
+  return policy.deriveConfidence(hypothesisHistory).level;
 }
 
 function extractHeadline(finalRca) {
@@ -141,7 +141,7 @@ function frameWithPriorArt(frame, memory) {
   return `${base}\n\n${priorArt}`;
 }
 
-async function openIncidentFromInvestigation(service, trigger, frame) {
+async function openIncidentFromInvestigation(service, trigger, frame, detectedAt = new Date().toISOString()) {
   const ledger = new Ledger();
 
   // Ask memory first. A recurrence of an already-diagnosed fault gets a short verification
@@ -164,9 +164,27 @@ async function openIncidentFromInvestigation(service, trigger, frame) {
     maxTurns: reusing ? VERIFY_TURNS : undefined,
   });
 
+  const confidenceVerdict = policy.deriveConfidence(result.hypothesis_history);
+  if (confidenceVerdict.capped) {
+    console.log(
+      `[sentinel] ${service}: confidence capped at medium — ${confidenceVerdict.policy.reason}`
+    );
+  }
+
   const incident = store.newIncident({
     service,
-    confidence: deriveConfidence(result.hypothesis_history),
+    // The real signal-arrival timestamp — the moment triage flagged this, before recall or
+    // investigation ran — kept distinct from openedAt (when the incident record itself gets
+    // created, after the full investigation concludes). The gap between the two is genuine
+    // detection-to-diagnosis latency, the kind of thing an evented pipeline gives you for free
+    // and a single "opened" timestamp quietly throws away.
+    detectedAt,
+    confidence: confidenceVerdict.level,
+    // Why the confidence landed where it did — an explicit, code-checked verdict on the
+    // trail's own discipline, not just the model's self-reported last tag. This is what makes
+    // "the model says CONFIRMED" and "the model EARNED confirmed" distinguishable after the
+    // fact, on every incident, not just the ones where it happens to come up.
+    confidencePolicy: { disciplined: confidenceVerdict.policy.disciplined, reason: confidenceVerdict.policy.reason, capped: confidenceVerdict.capped },
     headline: extractHeadline(result.final_rca),
     rca: result.final_rca,
     resolution: extractResolutionSteps(result.final_rca),
@@ -226,22 +244,55 @@ async function sweepOnce() {
   const summary = await explainFleet({ health, incidents: state.incidents });
   if (summary) store.update((s) => { s.fleetSummary = summary; });
 
+  // A detection EVENT is recorded the instant triage flags a service — independent of whether
+  // an incident ever results (a duplicate this sweep, a failed investigation). This is the
+  // honest evented-style record a single "incident opened" timestamp can't give you: signal
+  // arrived, here, now, whether or not anything downstream succeeds. Bounded so a long-running
+  // daemon doesn't grow this file forever.
+  const detectedAt = new Date().toISOString();
+  if (decision.anomalies.length) {
+    store.update((s) => {
+      s.detections = s.detections || [];
+      for (const anomaly of decision.anomalies) {
+        s.detections.push({ at: detectedAt, service: anomaly.service, reason: anomaly.reason });
+      }
+      if (s.detections.length > 500) s.detections = s.detections.slice(-500);
+    });
+  }
+
+  // Each anomaly is an independent unit of work — investigated concurrently, not one at a
+  // time. Safe because store.js's cross-process lock already serializes the actual writes;
+  // what used to be a blocking serial loop is now a real fan-out, which is both faster (one
+  // sweep's total time is the slowest single investigation, not their sum) and the honest
+  // shape of "several signals arrived at once", closer to how an evented pipeline would
+  // actually process them. Never lets one anomaly's failure reject the whole batch — each
+  // settles independently, tagged with which anomaly it was.
+  const results = await Promise.all(
+    decision.anomalies
+      .filter((anomaly) => !hasOpenIncidentFor(state, anomaly.service)) // already tracking this one
+      .map(async (anomaly) => {
+        const trigger = `Fleet sweep flagged ${anomaly.service} as anomalous: ${anomaly.reason}`;
+        try {
+          const incident = await openIncidentFromInvestigation(anomaly.service, trigger, frame, detectedAt);
+          return { ok: true, service: anomaly.service, incident };
+        } catch (err) {
+          // One investigation failing (e.g. a transient network error) must not cost the other
+          // anomalies in this same sweep their chance at a real incident — isolate the
+          // failure; the next sweep retries this service regardless.
+          return { ok: false, service: anomaly.service, error: err.message };
+        }
+      })
+  );
+
   const opened = [];
   const failed = [];
-  for (const anomaly of decision.anomalies) {
-    if (hasOpenIncidentFor(state, anomaly.service)) continue; // already tracking this one
-    const trigger = `Fleet sweep flagged ${anomaly.service} as anomalous: ${anomaly.reason}`;
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      const incident = await openIncidentFromInvestigation(anomaly.service, trigger, frame);
-      opened.push(incident);
-      console.log(`[sentinel] opened ${incident.id} for ${anomaly.service}: ${incident.headline}`);
-    } catch (err) {
-      // One investigation failing (e.g. a transient network error) must not cost the other
-      // anomalies in this same sweep their chance at a real incident — isolate the failure,
-      // log it plainly, and keep going. The next sweep will retry this service regardless.
-      failed.push({ service: anomaly.service, error: err.message });
-      console.error(`[sentinel] investigation failed for ${anomaly.service}: ${err.message}`);
+  for (const r of results) {
+    if (r.ok) {
+      opened.push(r.incident);
+      console.log(`[sentinel] opened ${r.incident.id} for ${r.service}: ${r.incident.headline}`);
+    } else {
+      failed.push({ service: r.service, error: r.error });
+      console.error(`[sentinel] investigation failed for ${r.service}: ${r.error}`);
     }
   }
 

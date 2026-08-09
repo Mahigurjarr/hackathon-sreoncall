@@ -5,6 +5,7 @@
 // prose afterwards, a claim can only cite evidence that was actually gathered.
 
 const store = require("../store/state");
+const { chat, MODELS } = require("../llm/client");
 
 class Ledger {
   constructor(state = null) {
@@ -59,6 +60,54 @@ class Ledger {
     const known = new Set(this.all().map((e) => e.id));
     const unresolved = ids.filter((id) => !known.has(id));
     return { ok: unresolved.length === 0, cited: ids, unresolved };
+  }
+
+  // An invented citation must not just be logged and shipped — that was the gap: three
+  // separate call sites (the RCA, a remediation's PR body/decline reason, a redemption
+  // verdict) used to warn and pass the text through unchanged. This gives the model exactly
+  // one chance to fix its own mistake before that happens: shown precisely which ids don't
+  // resolve and a list of every id that DOES exist in this run, it either replaces the bad
+  // citation with a real one or removes the specific unbacked claim. Never invents a new id —
+  // the prompt forbids it, and re-validating the result (not trusting the model's word) is
+  // what makes this "repair", not "ask nicely".
+  //
+  // Bounded to exactly one attempt. If it still doesn't resolve, the caller's existing
+  // warn-and-flag path is the correct fallback — a repair loop that retries indefinitely would
+  // burn budget chasing a citation the model may not be able to fix, and every genuine failure
+  // still needs to surface, never disappear into a longer retry chain.
+  async repair(text, { model = MODELS.fast } = {}) {
+    const { unresolved } = this.validate(text);
+    if (!unresolved.length) return { text, repaired: false, stillUnresolved: [] };
+
+    const validIds = this.all().map((e) => `${e.id}: ${e.summary}`);
+
+    const prompt = [
+      `The following text cites evidence ids that do not exist in this run: ${unresolved.join(", ")}.`,
+      "An invented citation is worse than an unbacked claim — it looks verified when it isn't.",
+      "",
+      "Text:",
+      String(text),
+      "",
+      "Evidence ids that actually exist (id: summary):",
+      validIds.length ? validIds.join("\n") : "(none)",
+      "",
+      `Rewrite the text. For each of ${unresolved.join(", ")}: if the claim is genuinely `
+        + "supported by one of the real ids above, cite that id instead. If it isn't, remove "
+        + "that specific unbacked clause and its citation entirely — do not soften it into an "
+        + "uncited claim, remove it. Never invent a new id. Return ONLY the corrected text.",
+    ].join("\n");
+
+    let repairedText = text;
+    try {
+      const reply = await chat({ model, messages: [{ role: "user", content: prompt }] });
+      repairedText = (reply.text || "").trim() || text;
+    } catch {
+      // A failed repair call is not a reason to lose the original text — fall through to
+      // returning it unchanged, which the caller's existing warn-and-flag path handles.
+    }
+
+    const revalidated = this.validate(repairedText);
+    return { text: repairedText, repaired: repairedText !== text, stillUnresolved: revalidated.unresolved };
   }
 }
 

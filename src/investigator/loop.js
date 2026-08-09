@@ -300,12 +300,21 @@ async function investigate({ trigger, frame = null, ledger = null, state = null,
     hypothesis_history.push(...parseHypotheses(final_rca, loopResult.steps.length));
   }
 
-  const { cited, unresolved } = activeLedger.validate(final_rca);
+  let { unresolved } = activeLedger.validate(final_rca);
   if (unresolved.length) {
-    // An invented citation must surface, never reach an operator disguised as a real one.
-    // eslint-disable-next-line no-console
-    console.warn(`investigate(): model cited unresolved evidence ids: ${unresolved.join(", ")}`);
+    // Give the model one real chance to fix its own invented citation before this ships —
+    // not just a warning that lets it through unchanged (Ledger.repair, src/evidence/ledger.js).
+    const repair = await activeLedger.repair(final_rca);
+    final_rca = repair.text;
+    unresolved = repair.stillUnresolved;
+    if (unresolved.length) {
+      // Still surfaces, never reaches an operator disguised as a real one — repair is a best
+      // effort, not a guarantee.
+      // eslint-disable-next-line no-console
+      console.warn(`investigate(): unresolved evidence ids survived repair: ${unresolved.join(", ")}`);
+    }
   }
+  const cited = activeLedger.cited(final_rca);
 
   return {
     hypothesis_history,

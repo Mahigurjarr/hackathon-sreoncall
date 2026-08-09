@@ -147,17 +147,28 @@ async function verifyRecovery(incident, { ledger = null, model = MODELS.fast } =
     maxTurns: VERIFY_TURNS,
   });
 
-  const { recovered, confidence, reason } = call.args;
-  const { cited, unresolved } = activeLedger.validate(reason || "");
+  const { recovered, confidence } = call.args;
+  let reason = call.args.reason || "";
+
+  // A verdict that closes an incident is exactly the claim that most needs its citations to
+  // be real, not just warned about — one repair attempt before this ships (Ledger.repair).
+  const { unresolved: initialUnresolved } = activeLedger.validate(reason);
+  let unresolved = initialUnresolved;
   if (unresolved.length) {
-    // eslint-disable-next-line no-console
-    console.warn(`verifyRecovery(${incident.id}): unresolved citations: ${unresolved.join(", ")}`);
+    const repair = await activeLedger.repair(reason);
+    reason = repair.text;
+    unresolved = repair.stillUnresolved;
+    if (unresolved.length) {
+      // eslint-disable-next-line no-console
+      console.warn(`verifyRecovery(${incident.id}): unresolved citations survived repair: ${unresolved.join(", ")}`);
+    }
   }
+  const cited = activeLedger.cited(reason);
 
   return {
     recovered: Boolean(recovered),
     confidence: confidence || "low",
-    reason: reason || "",
+    reason,
     citedEvidence: cited.filter((id) => !unresolved.includes(id)),
   };
 }

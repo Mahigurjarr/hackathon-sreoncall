@@ -303,11 +303,11 @@ async function draftRemediation(incident, { ledger = null, model = MODELS.deep }
   const allEvidenceIds = [...new Set([...evidence.map((e) => e.id), ...newlyGatheredIds(gathered)])];
 
   if (call.name === "no_code_fix") {
-    validateCitations(`draftRemediation(${incident.id})`, activeLedger, call.args.reason);
-    return { kind: "no_code_fix", reason: call.args.reason || "(no reason given)", incidentId: incident.id };
+    const reason = await repairCitations(`draftRemediation(${incident.id})`, activeLedger, call.args.reason);
+    return { kind: "no_code_fix", reason: reason || "(no reason given)", incidentId: incident.id };
   }
 
-  const { title, branchSlug, summary, body, files } = call.args;
+  const { title, branchSlug, summary, files } = call.args;
 
   if (!Array.isArray(files) || !files.length) {
     throw new Error(`draftRemediation(${incident.id}): propose_fix returned no files`);
@@ -323,7 +323,7 @@ async function draftRemediation(incident, { ledger = null, model = MODELS.deep }
     );
   }
 
-  validateCitations(`draftRemediation(${incident.id})`, activeLedger, body);
+  const body = await repairCitations(`draftRemediation(${incident.id})`, activeLedger, call.args.body);
 
   const slug = String(branchSlug || "fix").replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   const branchName = `agent/${incident.id.toLowerCase()}-${slug}`.slice(0, 200);
@@ -349,15 +349,16 @@ async function draftRemediation(incident, { ledger = null, model = MODELS.deep }
   return { kind: "github_pr", proposal };
 }
 
-// Same standard as investigate()'s own final RCA: an invented citation must surface, never
-// reach a reviewer disguised as a real one. Warns rather than throws — the same tolerance
-// loop.js uses, since the proposal itself is still reviewable even if one clause is unbacked.
-function validateCitations(label, ledger, text) {
-  const { unresolved } = ledger.validate(text || "");
-  if (unresolved.length) {
+// Same standard as investigate()'s own final RCA: an invented citation gets one real repair
+// attempt (Ledger.repair) before this text ships, not just a warning while it passes through
+// unchanged. Returns the repaired text — callers store this, not the original.
+async function repairCitations(label, ledger, text) {
+  const result = await ledger.repair(text || "");
+  if (result.stillUnresolved.length) {
     // eslint-disable-next-line no-console
-    console.warn(`${label}: unresolved citations: ${unresolved.join(", ")}`);
+    console.warn(`${label}: unresolved citations survived repair: ${result.stillUnresolved.join(", ")}`);
   }
+  return result.text;
 }
 
 /**
@@ -418,6 +419,17 @@ async function reviseRemediation(proposal, feedback, { model = MODELS.deep } = {
   });
   const newIds = newlyGatheredIds(gathered);
 
+  // store.update()'s callback runs synchronously (see store/state.js), so the repair call —
+  // which needs the network — has to resolve BEFORE update() runs, not inside it.
+  const withdrawnReason =
+    call.name === "no_code_fix"
+      ? await repairCitations(`reviseRemediation(${proposal.id})`, ledger, call.args.reason)
+      : null;
+  const repairedBody =
+    call.name === "propose_fix"
+      ? await repairCitations(`reviseRemediation(${proposal.id})`, ledger, call.args.body)
+      : null;
+
   const { update } = require("../store/state");
   let updated;
 
@@ -434,10 +446,10 @@ async function reviseRemediation(proposal, feedback, { model = MODELS.deep } = {
 
     if (call.name === "no_code_fix") {
       p.status = "withdrawn";
-      p.withdrawnReason = call.args.reason || "(no reason given)";
+      p.withdrawnReason = withdrawnReason || "(no reason given)";
       p.summary = `Withdrawn after review: ${p.withdrawnReason}`;
     } else {
-      const { title, summary, body, files } = call.args;
+      const { title, summary, files } = call.args;
       const outOfScope = (files || []).filter((f) => !isAllowedPath(f.path));
       if (outOfScope.length) {
         throw new Error(`revision proposed files outside the allowed paths: ${outOfScope.map((f) => f.path).join(", ")}`);
@@ -447,7 +459,7 @@ async function reviseRemediation(proposal, feedback, { model = MODELS.deep } = {
       p.payload = {
         ...p.payload,
         title,
-        body,
+        body: repairedBody,
         files: (files || []).map((f) => ({
           path: f.path,
           content: f.content,
