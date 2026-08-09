@@ -1,0 +1,20 @@
+name: checkout-error-rate
+service: checkout
+signal:
+  type: promql
+  # Absent-safe: checkout can legitimately return zero series (no traffic yet) rather
+  # than a real zero — the trailing `or (... * 0)` term turns that silent absence into an
+  # explicit zero so it's never mistaken for "no data" instead of "no errors."
+  query: >
+    sum by (service_name) (rate(traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR", service_name="checkout"}[5m]))
+      or (sum by (service_name) (rate(traces_span_metrics_calls_total{service_name="checkout"}[5m])) * 0)
+rationale: >
+  This rule surfaces anomalous error activity originating in checkout. During INC-1,
+  checkout produced a non-zero error-call series while its payment dependency showed no
+  corresponding server handling or ERROR logs, consistent with a client-side failure
+  [E114][E116][E113]. Error traces from checkout also carried explicit exception text
+  pinpointing a DNS A-record lookup failure ("lookup badAddress on 127.0.0.11:53") [E110],
+  which the investigating agent can corroborate at incident time by inspecting exception
+  messages and correlated spans [E115]. There is no fixed threshold here: whether a given
+  reading constitutes an incident is judged live by the agent against its recent baseline
+  and corroborating traces/logs, not by a number baked into this file.
