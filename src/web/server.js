@@ -18,7 +18,8 @@ const { SERVICES } = require("../lgtm/client");
 const { approveProposal, applyGithubPrProposal } = require("../actions/proposals");
 const { reviseRemediation } = require("../actions/remediation");
 const { loadedPractices, PRACTICES_DIR, DOCS } = require("../practices");
-const { probeStack } = require("../lgtm/health");
+const { probeStack, assessHealth } = require("../lgtm/health");
+const { askCopilot } = require("../copilot/assistant");
 
 const PORT = Number(process.env.SRE_WEB_PORT) || 8420;
 const DIST_DIR = path.join(__dirname, "..", "..", "web", "dist");
@@ -29,6 +30,30 @@ function githubTarget() {
   const slug = process.env.GITHUB_REPO || "";
   const [owner, repo] = slug.split("/");
   return { owner, repo, token: process.env.GITHUB_TOKEN, slug };
+}
+
+// How many recent metric readings keep their raw response inline in /api/state.
+// The dashboard's trend charts read `raw.data.result[].value[1]` directly, so those bodies
+// have to travel; every other raw body does not.
+const INLINE_METRIC_RAW = 400;
+
+// The evidence ledger is append-only and its raw responses dominate the payload — log and
+// trace bodies alone were 5MB of an 8MB /api/state, re-sent on every poll, for data the
+// dashboard never reads inline. It renders a raw body only inside the evidence drill-down,
+// which fetches /api/evidence/:id one record at a time.
+//
+// So the wire payload drops the bodies it doesn't need and flags them `rawAvailable`. Nothing
+// is deleted, hidden, or summarised away: the full record stays on disk and one fetch away,
+// which is the line that matters — the agent's own visibility is never what gets trimmed to
+// make a number look better. Only the transport is.
+function trimEvidenceForWire(evidence) {
+  const inlineFrom = evidence.length - INLINE_METRIC_RAW;
+  return evidence.map((entry, index) => {
+    if (entry.kind === "metric" && index >= inlineFrom) return entry;
+    if (entry.raw === undefined || entry.raw === null) return entry;
+    const { raw, ...rest } = entry;
+    return { ...rest, rawAvailable: true };
+  });
 }
 
 const MIME = {
@@ -148,6 +173,7 @@ function handleApi(req, res, url) {
     const { slug, token } = githubTarget();
     return sendJson(res, 200, {
       ...state,
+      evidence: trimEvidenceForWire(state.evidence || []),
       services: SERVICES,
       // Lets the dashboard say exactly where a PR would land, and warn honestly when the
       // approve path would fail, instead of only finding out on click.
@@ -169,6 +195,42 @@ function handleApi(req, res, url) {
     return sendJson(res, 200, { docs });
   }
 
+  // The conversational command surface is grounded exclusively in the same persisted state
+  // this API serves. It can recommend navigating to a proposal, but never approves or applies
+  // one: those remain explicit routes with a human action boundary below.
+  if (url.pathname === "/api/copilot" && req.method === "POST") {
+    return readJsonBody(req)
+      .then((body) =>
+        askCopilot({
+          message: body.message,
+          conversationId: body.conversationId,
+          role: body.role,
+          context: body.context || {},
+        }),
+      )
+      .then((result) => sendJson(res, 200, result))
+      .catch((err) => {
+        // Model capacity is an expected dependency state, not a malformed operator request.
+        // Return a renderable availability result so the UI can explain it without the
+        // browser treating the handled condition as an uncaught resource failure.
+        if (/credit_balance_exhausted|insufficient_quota/.test(err.message)) {
+          return sendJson(res, 200, {
+            unavailable: true,
+            error: "AI reasoning is temporarily unavailable because the shared hackathon model key has no remaining credits. Live monitoring continues; grounded answers will resume when the key is replenished.",
+          });
+        }
+        return sendJson(res, 502, { error: `copilot unavailable: ${err.message}` });
+      });
+  }
+
+  const copilotConversation = url.pathname.match(/^\/api\/copilot\/([^/]+)$/);
+  if (copilotConversation && req.method === "GET") {
+    const id = decodeURIComponent(copilotConversation[1]);
+    const conversation = (store.load().copilotConversations || []).find((item) => item.id === id);
+    if (!conversation) return sendJson(res, 404, { error: `no copilot conversation '${id}'` });
+    return sendJson(res, 200, conversation);
+  }
+
   const proposalAction = url.pathname.match(/^\/api\/proposals\/([^/]+)\/([^/]+)$/);
   if (proposalAction && req.method === "POST") {
     return handleProposalAction(req, res, proposalAction[1], proposalAction[2]);
@@ -182,18 +244,34 @@ function handleApi(req, res, url) {
     return sendJson(res, 200, entry);
   }
 
-  // Liveness of this container plus reachability of the backends the agent sees through.
-  // Probed on request rather than served from the sweep's cache, so "is the agent blind right
-  // now?" is answerable without waiting up to 45s for the next sweep.
+  // Process liveness stays separate from product readiness. The API container should keep
+  // serving the incident history even when a telemetry backend or the sentinel is degraded.
+  if (url.pathname === "/api/live" && req.method === "GET") {
+    return sendJson(res, 200, { ok: true, at: new Date().toISOString(), service: "api" });
+  }
+
+  // Product readiness: direct checks for every telemetry backend plus the persisted sentinel
+  // lifecycle. This is intentionally stricter than /api/live so a running process cannot
+  // masquerade as a functioning monitoring product.
   if (url.pathname === "/api/health" && req.method === "GET") {
     return probeStack()
       .then((checks) => {
-        const stored = store.load().health || null;
-        const allUp = Object.values(checks).every((c) => c.up);
-        sendJson(res, allUp ? 200 : 503, {
-          ok: allUp,
+        const state = store.load();
+        const stored = state.health || null;
+        const assessment = assessHealth(checks, state);
+        sendJson(res, assessment.ok ? 200 : 503, {
+          ok: assessment.ok,
           at: new Date().toISOString(),
           backends: checks,
+          sentinel: assessment.sentinel,
+          telemetry: state.telemetry
+            ? {
+                at: state.telemetry.at,
+                status: state.telemetry.status,
+                frameAt: state.telemetry.frameAt,
+                lastAnalyzedAt: state.telemetry.lastAnalyzedAt || null,
+              }
+            : null,
           fleet: stored
             ? { at: stored.at, reachable: stored.reachable, services: stored.services?.length || 0 }
             : null,
@@ -238,4 +316,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server };
+module.exports = { server, trimEvidenceForWire, INLINE_METRIC_RAW };

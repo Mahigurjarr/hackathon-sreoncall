@@ -10,6 +10,7 @@ const MIMIR_URL = process.env.MANAGED_MIMIR_URL || "http://10.10.1.139:9009";
 const LOKI_URL = process.env.MANAGED_LOKI_URL || "http://10.10.1.139:3100";
 const TEMPO_URL = process.env.MANAGED_TEMPO_URL || "http://10.10.1.139:3200";
 const ORG_ID = process.env.MANAGED_LGTM_ORG_ID || "hackathon";
+const REQUEST_TIMEOUT_MS = Number(process.env.SRE_LGTM_REQUEST_TIMEOUT_MS) || 15000;
 
 const headers = { "X-Scope-OrgID": ORG_ID };
 
@@ -35,7 +36,15 @@ function lokiService(name) {
 }
 
 async function get(url, what) {
-  const res = await fetch(url, { headers });
+  let res;
+  try {
+    res = await fetch(url, { headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  } catch (err) {
+    if (err?.name === "TimeoutError") {
+      throw new Error(`${what} timed out after ${REQUEST_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  }
   if (!res.ok) throw new Error(`${what} failed: ${res.status} ${await res.text()}`);
   return res.json();
 }

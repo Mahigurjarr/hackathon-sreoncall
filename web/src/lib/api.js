@@ -20,6 +20,10 @@ export function getEvidence(id) {
   return getJson(`/evidence/${encodeURIComponent(id)}`);
 }
 
+export function getCopilotConversation(id) {
+  return getJson(`/copilot/${encodeURIComponent(id)}`);
+}
+
 async function postJson(path, body) {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
@@ -45,4 +49,10 @@ export function reviseProposal(id, feedback) {
 
 export function rejectProposal(id, reason) {
   return postJson(`/proposals/${encodeURIComponent(id)}/reject`, { reason });
+}
+
+export async function askCopilot({ message, conversationId, role, context }) {
+  const result = await postJson("/copilot", { message, conversationId, role, context });
+  if (result.unavailable) throw new Error(result.error);
+  return result;
 }

@@ -14,7 +14,7 @@ const { triage } = require("./triage");
 const { investigate } = require("../investigator/loop");
 const { draftRemediation } = require("../actions/remediation");
 const { recall, priorArtBlock } = require("../memory/recall");
-const { probeFleet } = require("../lgtm/health");
+const { probeFleet, probeStack } = require("../lgtm/health");
 const { explainFleet } = require("../actions/explain");
 const { scheduleRedemption, runRedemptionChecks } = require("../actions/redemption");
 const policy = require("../investigator/policy");
@@ -34,9 +34,24 @@ function deriveConfidence(hypothesisHistory) {
   return policy.deriveConfidence(hypothesisHistory).level;
 }
 
+// The RCA's first block IS the headline (loop.js's SYSTEM_PROMPT asks for it that way), but
+// the model often re-states the prompt's own label first — "Headline: - checkout — ...". That
+// prefix is scaffolding from the format, not content, and stripping it here rather than only
+// at render time matters: this stored string is what the recall prompt, the PR body, the MCP
+// list_incidents result, and the copilot's grounding packet all read. Left in, "Headline:
+// Headline: - checkout" is what a reviewer sees in a pull request.
+//
+// Text extraction, not a judgement — it removes a label the prompt put there, and changes no
+// claim the model made.
 function extractHeadline(finalRca) {
   const firstBlock = String(finalRca).split(/\n\s*\n/)[0] || finalRca;
-  return firstBlock.replace(/\s+/g, " ").trim().slice(0, 220);
+  return firstBlock
+    .replace(/\s+/g, " ")
+    // The separator is required and must be a colon or a spaced dash — without that, a
+    // service genuinely called "headline-service" loses its own name to the stripper.
+    .replace(/^\s*-?\s*\*{0,2}headline\*{0,2}\s*(?::|\s-)\s*\*{0,2}\s*-?\s*/i, "")
+    .trim()
+    .slice(0, 220);
 }
 
 // Pulls the "Recommended next steps:" section out of the RCA's own required format
@@ -141,6 +156,15 @@ function frameWithPriorArt(frame, memory) {
   return `${base}\n\n${priorArt}`;
 }
 
+function errorRecord(err) {
+  const message = String(err?.message || err || "unknown sentinel failure");
+  const llmCode = message.match(/LLM unavailable \(([^)]+)\)/)?.[1];
+  return {
+    code: err?.code || llmCode || "sweep_failed",
+    message: message.split("\n")[0].slice(0, 500),
+  };
+}
+
 async function openIncidentFromInvestigation(service, trigger, frame, detectedAt = new Date().toISOString()) {
   const ledger = new Ledger();
 
@@ -219,24 +243,38 @@ async function openIncidentFromInvestigation(service, trigger, frame, detectedAt
 
 async function sweepOnce() {
   const sweepLedger = new Ledger();
-  const frame = await buildFrame(sweepLedger);
-  const decision = await triage(frame);
-
-  // Live per-service health, recorded every sweep. Independent of the incident list on
-  // purpose: "no incident" must never be allowed to render as "healthy" when the real answer
-  // is "this service stopped emitting and nobody has looked yet". A probe failure is stored
-  // as-is rather than dropped — a stale-but-labelled reading beats a silent one.
-  let health;
-  try {
-    health = await probeFleet();
-  } catch (err) {
-    health = { at: new Date().toISOString(), reachable: false, error: err.message, services: [] };
-  }
-
+  // Collection is deliberately independent from model reasoning. Metrics, traces, backend
+  // reachability, and per-service health all land in state BEFORE triage calls the LLM. If the
+  // model is unavailable, the dashboard still receives current telemetry and an explicit
+  // degraded sentinel state instead of freezing at the last successful AI decision.
+  const [frameResult, healthResult, stackResult] = await Promise.allSettled([
+    buildFrame(sweepLedger),
+    probeFleet(),
+    probeStack(),
+  ]);
+  const collectedAt = new Date().toISOString();
+  const health = healthResult.status === "fulfilled"
+    ? healthResult.value
+    : { at: collectedAt, reachable: false, error: healthResult.reason?.message || "fleet probe failed", services: [] };
+  const backends = stackResult.status === "fulfilled"
+    ? stackResult.value
+    : { stack: { up: false, latencyMs: null, error: stackResult.reason?.message || "stack probe failed" } };
+  const frame = frameResult.status === "fulfilled" ? frameResult.value : null;
   const state = store.update((s) => {
-    s.lastSweep = new Date().toISOString();
     s.health = health;
+    s.telemetry = {
+      at: collectedAt,
+      status: frame ? "current" : "degraded",
+      frameAt: frame?.at || null,
+      evidenceIds: frame?.evidenceIds || [],
+      backends,
+      error: frame ? null : errorRecord(frameResult.reason),
+    };
   });
+
+  if (!frame) throw frameResult.reason;
+
+  const decision = await triage(frame);
 
   // Translate the readings into something a non-engineer can act on. Deliberately after the
   // health write, so the numbers are on the dashboard even if this fails — the summary is a
@@ -310,16 +348,49 @@ async function sweepOnce() {
   // "didn't hold") with fresh cited evidence rather than sitting as an unchecked claim forever.
   const redemptions = await runRedemptionChecks();
 
+  const completedAt = new Date().toISOString();
+  store.update((s) => {
+    s.lastSweep = completedAt;
+    if (s.telemetry) s.telemetry.lastAnalyzedAt = completedAt;
+  });
+
   return { ...decision, opened, failed, redemptions };
 }
 
 async function runDaemon({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
   console.log(`[sentinel] daemon starting — sweeping every ${intervalMs}ms, unprompted`);
+  const startedAt = new Date().toISOString();
+  store.update((s) => {
+    s.sentinel = {
+      ...(s.sentinel || {}),
+      status: "starting",
+      startedAt,
+      lastAttemptAt: null,
+      lastError: null,
+    };
+  });
   for (;;) {
     const startedAt = Date.now();
+    const attemptedAt = new Date(startedAt).toISOString();
+    store.update((s) => {
+      s.sentinel = {
+        ...(s.sentinel || {}),
+        status: "running",
+        lastAttemptAt: attemptedAt,
+      };
+    });
     try {
       // eslint-disable-next-line no-await-in-loop
       const decision = await sweepOnce();
+      const succeededAt = new Date().toISOString();
+      store.update((s) => {
+        s.sentinel = {
+          ...(s.sentinel || {}),
+          status: "healthy",
+          lastSuccessAt: succeededAt,
+          lastError: null,
+        };
+      });
       const n = decision.anomalies.length;
       const r = decision.emergingRisks.length;
       const failedSuffix = decision.failed.length ? `, ${decision.failed.length} investigation(s) failed (will retry next sweep)` : "";
@@ -328,6 +399,15 @@ async function runDaemon({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
         : "";
       console.log(`[sentinel] sweep complete: ${n} anomal${n === 1 ? "y" : "ies"}, ${r} emerging risk(s), ${decision.opened.length} incident(s) opened${failedSuffix}${redeemedSuffix}`);
     } catch (err) {
+      const failedAt = new Date().toISOString();
+      store.update((s) => {
+        s.sentinel = {
+          ...(s.sentinel || {}),
+          status: "degraded",
+          lastFailureAt: failedAt,
+          lastError: errorRecord(err),
+        };
+      });
       console.error("[sentinel] sweep failed:", err.message);
     }
     const wait = Math.max(1000, intervalMs - (Date.now() - startedAt));
@@ -338,7 +418,7 @@ async function runDaemon({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
 
 module.exports = {
   sweepOnce, runDaemon, openIncidentFromInvestigation, attachRemediation,
-  deriveConfidence, extractHeadline, extractResolutionSteps, hasOpenIncidentFor,
+  deriveConfidence, extractHeadline, extractResolutionSteps, hasOpenIncidentFor, errorRecord,
 };
 
 if (require.main === module) {

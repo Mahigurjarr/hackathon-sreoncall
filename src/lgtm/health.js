@@ -21,7 +21,12 @@
 
 "use strict";
 
-const { queryMetric, SERVICES } = require("./client");
+const { queryMetric, queryLogs, searchTracesQL, SERVICES } = require("./client");
+
+const SENTINEL_FRESH_MS = 5 * 60 * 1000;
+const PROBE_TIMEOUT_MS = Number(process.env.SRE_HEALTH_PROBE_TIMEOUT_MS) || 5000;
+const LOKI_HEALTH_QUERY = '{service_name=~"opentelemetry-demo/.+"}';
+const TEMPO_HEALTH_QUERY = "{status=error}";
 
 // The span-derived metric family is used because it is the one every service in this fleet
 // emits; a family with partial coverage would report "silent" for services that are actually
@@ -98,15 +103,42 @@ async function probeFleet() {
 async function probeStack() {
   const checks = {};
   const probes = [
-    ["mimir", () => queryMetric("vector(1)")],
+    ["mimir", async () => {
+      const raw = await queryMetric("vector(1)");
+      return { series: raw?.data?.result?.length || 0 };
+    }],
+    ["loki", async () => {
+      const raw = await queryLogs(LOKI_HEALTH_QUERY, 1);
+      const streams = raw?.data?.result || [];
+      let lines = 0;
+      let newestNs = null;
+      for (const stream of streams) {
+        for (const value of stream.values || []) {
+          lines += 1;
+          try {
+            if (!newestNs || BigInt(value[0]) > BigInt(newestNs)) newestNs = value[0];
+          } catch {
+            // A malformed timestamp should not turn a successful Loki response into downtime.
+          }
+        }
+      }
+      const newestAt = newestNs
+        ? new Date(Number(BigInt(newestNs) / 1000000n)).toISOString()
+        : null;
+      return { streams: streams.length, lines, newestAt };
+    }],
+    ["tempo", async () => {
+      const raw = await searchTracesQL(TEMPO_HEALTH_QUERY, 1);
+      return { traces: raw?.traces?.length || 0 };
+    }],
   ];
 
   await Promise.all(
     probes.map(async ([name, fn]) => {
       const startedAt = Date.now();
       try {
-        await fn();
-        checks[name] = { up: true, latencyMs: Date.now() - startedAt };
+        const details = await withTimeout(fn(), name, PROBE_TIMEOUT_MS);
+        checks[name] = { up: true, latencyMs: Date.now() - startedAt, ...details };
       } catch (err) {
         checks[name] = { up: false, latencyMs: Date.now() - startedAt, error: err.message };
       }
@@ -116,4 +148,56 @@ async function probeStack() {
   return checks;
 }
 
-module.exports = { probeFleet, probeStack, CALLS, ERRORS };
+function withTimeout(promise, name, timeoutMs) {
+  let timeout;
+  const deadline = new Promise((_, reject) => {
+    timeout = setTimeout(
+      () => reject(new Error(`${name} health probe timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timeout));
+}
+
+function assessSentinel(state, now = Date.now(), staleMs = SENTINEL_FRESH_MS) {
+  const runtime = state?.sentinel || {};
+  const lastSuccessAt = runtime.lastSuccessAt || state?.lastSweep || null;
+  const successMs = lastSuccessAt ? new Date(lastSuccessAt).getTime() : NaN;
+  const startedMs = runtime.startedAt ? new Date(runtime.startedAt).getTime() : NaN;
+  const ageMs = Number.isFinite(successMs) ? Math.max(0, now - successMs) : null;
+  const fresh = ageMs !== null && ageMs <= staleMs;
+  const succeededThisRun = !Number.isFinite(startedMs) || (Number.isFinite(successMs) && successMs >= startedMs);
+  const status = runtime.status || (lastSuccessAt ? "legacy" : "not_started");
+  const up = fresh && succeededThisRun && status !== "degraded" && status !== "starting";
+
+  return {
+    up,
+    status,
+    startedAt: runtime.startedAt || null,
+    lastAttemptAt: runtime.lastAttemptAt || null,
+    lastSuccessAt,
+    lastFailureAt: runtime.lastFailureAt || null,
+    ageMs,
+    error: runtime.lastError || null,
+  };
+}
+
+function assessHealth(checks, state, now = Date.now(), staleMs = SENTINEL_FRESH_MS) {
+  const backendsUp = Object.keys(checks).length > 0 && Object.values(checks).every((check) => check.up);
+  const sentinel = assessSentinel(state, now, staleMs);
+  return { ok: backendsUp && sentinel.up, backendsUp, sentinel };
+}
+
+module.exports = {
+  probeFleet,
+  probeStack,
+  assessSentinel,
+  assessHealth,
+  CALLS,
+  ERRORS,
+  LOKI_HEALTH_QUERY,
+  TEMPO_HEALTH_QUERY,
+  SENTINEL_FRESH_MS,
+  PROBE_TIMEOUT_MS,
+  withTimeout,
+};

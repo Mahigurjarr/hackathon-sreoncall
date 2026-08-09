@@ -29,9 +29,10 @@ services:
       - ./sre-as-code:/app/sre-as-code:ro
     restart: unless-stopped
     healthcheck:
-      # Probes the metrics backend, so "unhealthy" means the agent is blind — not merely that
-      # the process is gone.
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8420/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      # Process-only liveness. Product readiness (Mimir + Loki + Tempo + sentinel freshness)
+      # is exposed separately at /api/health, so a degraded agent never takes the review UI
+      # down with it.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8420/api/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       start_period: 20s
@@ -51,9 +52,9 @@ services:
       # means the dashboard is already serving when the first sweep lands.
       - api
     healthcheck:
-      # The daemon has no port. Liveness is "it wrote a sweep timestamp recently" — a process
-      # that is running but has stopped sweeping is exactly the silent failure worth catching.
-      test: ["CMD", "node", "-e", "const s=require('/app/src/store/state').load(); const age=Date.now()-new Date(s.lastSweep||0).getTime(); process.exit(s.lastSweep && age < 300000 ? 0 : 1)"]
+      # The daemon has no port. Readiness is based on its explicit lifecycle state and a fresh
+      # successful sweep, not merely the fact that its process is still present.
+      test: ["CMD", "node", "-e", "const s=require('/app/src/store/state').load(); const h=require('/app/src/lgtm/health').assessSentinel(s); process.exit(h.up?0:1)"]
       interval: 60s
       timeout: 10s
       start_period: 120s

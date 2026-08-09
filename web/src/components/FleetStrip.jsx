@@ -183,7 +183,7 @@ export function FleetStrip({ services, incidents, health, onSelectIncident }) {
         ].filter(Boolean).join(" · ") || `all ${services.length} reporting, no errors`;
 
   return (
-    <section className="flex flex-col gap-2" aria-label="Fleet health">
+    <section className="flex flex-col gap-2" aria-label="Service health and telemetry status">
       <div className="flex items-baseline gap-2">
         <h2 className="t-micro text-muted-text-2">Fleet</h2>
         <span className={`t-label ${health && !health.reachable ? "text-severity-medium" : "text-muted-text-2"}`}>

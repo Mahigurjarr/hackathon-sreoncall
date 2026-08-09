@@ -1,0 +1,11 @@
+{
+  "name": "hackathon-stack",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:policy": "node --test test/investigator-policy.test.js",
+    "test:safety": "node --test test/ownership-safety.test.js",
+    "mcp": "node src/mcp/server.js"
+  }
+}

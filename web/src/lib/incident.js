@@ -30,8 +30,16 @@ export function confidenceOf(inc) {
   return firstDefined(inc, ["confidence", "confidenceLevel"]) || "unknown";
 }
 
+// The stored RCA stays byte-for-byte what the model wrote — it is the artifact a PR body and
+// an auditor read. Only the prompt's own "Headline:" label is dropped on the way to the
+// screen, and only where it opens the text: it is format scaffolding the reader did not ask
+// for, and leaving it in makes the analysis panel read like a leaked template. Same separator
+// rule as src/sentinel/daemon.js's extractHeadline — a colon or a spaced dash, so a sentence
+// that merely starts with the word keeps it.
 export function rcaOf(inc) {
-  return firstDefined(inc, ["rca", "rootCause", "analysis", "diagnosis"]);
+  const text = firstDefined(inc, ["rca", "rootCause", "analysis", "diagnosis"]);
+  if (!text) return text;
+  return String(text).replace(/^\s*-?\s*\*{0,2}headline\*{0,2}\s*(?::|\s-)\s*\*{0,2}\s*-?\s*/i, "");
 }
 
 export function resolutionStepsOf(inc) {

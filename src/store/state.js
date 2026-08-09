@@ -4,7 +4,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const STATE_PATH = path.join(__dirname, "..", "..", "store", "state.json");
+// Overridable so a test can exercise the real read-modify-write path — the lockfile, the
+// status guards, the proposal state machine — against a throwaway file instead of the running
+// agent's live memory. Nothing in production sets it.
+const STATE_PATH = process.env.SRE_STATE_PATH
+  || path.join(__dirname, "..", "..", "store", "state.json");
 
 const EMPTY = { incidents: [], evidence: [], installs: [], traces: [], lastSweep: null, emergingRisks: [] };
 

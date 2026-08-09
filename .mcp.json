@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "sreoncall": {
+      "command": "node",
+      "args": ["src/mcp/server.js"]
+    },
     "shadcn-ui": {
       "command": "npx",
       "args": ["-y", "@jpisnice/shadcn-ui-mcp-server"],

@@ -6,11 +6,17 @@
 // stored is `new Date().toISOString()` (UTC internally); this file is only about display.
 
 const TIME_OPTS = { timeZone: "UTC", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false };
+const SHORT_TIME_OPTS = { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hour12: false };
 const DATETIME_OPTS = { ...TIME_OPTS, year: "numeric", month: "short", day: "2-digit" };
 
 export function formatUtcTime(iso) {
   if (!iso) return "—";
   return `${new Date(iso).toLocaleTimeString("en-GB", TIME_OPTS)} UTC`;
+}
+
+export function formatUtcShortTime(iso) {
+  if (!iso) return "—";
+  return `${new Date(iso).toLocaleTimeString("en-GB", SHORT_TIME_OPTS)} UTC`;
 }
 
 export function formatUtcDateTime(iso) {
