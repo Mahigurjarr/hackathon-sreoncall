@@ -1,0 +1,319 @@
+#!/usr/bin/env node
+"use strict";
+
+// SRE CLI — the human-facing window onto store/state.json.
+//
+// Progressive disclosure is the organizing principle, not a decoration: `status` and `list`
+// show a headline only; `why` adds a compact, citation-backed explanation; `evidence` and
+// `timeline` are the explicit "show me everything" drill-downs a human reaches for on demand.
+// Nothing here judges whether a number is "bad" — that judgement already happened upstream
+// (investigator/sentinel) before it landed in state.json. This file only formats what's
+// already there. No threshold constants live in this file for that reason.
+//
+// Field-name note: CONTRACTS.md freezes newIncident()'s BASE shape only
+// (id/status/openedAt/openedBy/evidence/revisions/steps). Everything past that is populated
+// by the investigator lane, built in parallel with this file, so exact field names for things
+// like "headline" or "root cause text" weren't frozen at the time this was written. Every
+// getter below tries several plausible aliases (see firstDefined/firstArray calls) so this
+// stays useful even if that lane's naming lands slightly differently than guessed here.
+//
+// Requires below are relative to this file's own location (__dirname), so this CLI resolves
+// store/state.json correctly no matter what directory it's invoked from.
+
+const { load } = require("../src/store/state");
+const { Ledger } = require("../src/evidence/ledger");
+
+const TERMINAL_STATUSES = new Set(["resolved", "closed", "mitigated"]);
+
+// ---- generic field lookup (tolerant of naming variance in incident/event objects) --------
+
+function firstDefined(obj, keys) {
+  for (const k of keys) {
+    if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
+  }
+  return undefined;
+}
+
+function firstArray(obj, keys) {
+  for (const k of keys) {
+    if (Array.isArray(obj && obj[k]) && obj[k].length) return obj[k];
+  }
+  return [];
+}
+
+function serviceOf(inc) {
+  return firstDefined(inc, ["service", "target", "serviceName"]) || "unknown service";
+}
+
+function confidenceOf(inc) {
+  return firstDefined(inc, ["confidence", "confidenceLevel"]) || "unknown";
+}
+
+function rcaOf(inc) {
+  return firstDefined(inc, ["rca", "rootCause", "analysis", "diagnosis"]);
+}
+
+function resolutionStepsOf(inc) {
+  const arr = firstArray(inc, ["resolution", "resolutionSteps", "nextSteps", "ownership", "remediation"]);
+  return arr.map((s) => (typeof s === "string" ? s : s.step || s.text || s.action || JSON.stringify(s)));
+}
+
+function headlineOf(inc) {
+  const explicit = firstDefined(inc, ["headline", "title", "summary"]);
+  if (explicit) return explicit;
+  const since = inc.openedAt ? fmtClock(inc.openedAt) : "an unknown time";
+  return `${serviceOf(inc)} — ${inc.status || "open"} since ${since}`;
+}
+
+// ---- time formatting -----------------------------------------------------------------------
+
+function fmtClock(iso) {
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return String(iso);
+  }
+}
+
+function fmtFull(iso) {
+  if (!iso) return "unknown time";
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return String(iso);
+  }
+}
+
+function findIncident(state, id) {
+  return state.incidents.find((i) => i.id === id) || null;
+}
+
+function monitoredCount(state) {
+  if (state.installs && state.installs.length) {
+    return new Set(state.installs.map((i) => i.service || i.target)).size;
+  }
+  try {
+    // Referencing the spine's known-service list is a static read (no network call) —
+    // just the fleet size this system knows how to watch, not a live query.
+    return require("../src/lgtm/client").SERVICES.length;
+  } catch {
+    return 0;
+  }
+}
+
+// ---- subcommands ----------------------------------------------------------------------------
+
+function cmdStatus(state) {
+  const open = state.incidents.filter((i) => !TERMINAL_STATUSES.has(i.status));
+
+  if (!open.length) {
+    const sweep = state.lastSweep ? fmtFull(state.lastSweep) : "never";
+    console.log(`✓ No open incidents. Last sweep: ${sweep}. ${monitoredCount(state)} services monitored.`);
+    return;
+  }
+
+  if (open.length === 1) {
+    const inc = open[0];
+    console.log(`⚠ 1 open incident — ${inc.id}: ${headlineOf(inc)} (confidence: ${confidenceOf(inc)})`);
+    return;
+  }
+
+  console.log(`⚠ ${open.length} open incidents:`);
+  for (const inc of open) {
+    console.log(`  - ${inc.id}: ${headlineOf(inc)} (confidence: ${confidenceOf(inc)})`);
+  }
+}
+
+function cmdList(state) {
+  if (!state.incidents.length) {
+    console.log("No incidents recorded yet.");
+    return;
+  }
+  for (const inc of state.incidents) {
+    const status = String(inc.status || "open").padEnd(10);
+    const svc = serviceOf(inc).padEnd(20);
+    console.log(`${String(inc.id).padEnd(8)} ${status} ${svc} opened ${fmtFull(inc.openedAt)}`);
+  }
+}
+
+function cmdWhy(state, id) {
+  if (!id) return fail("Usage: sre why <incident-id>");
+  const inc = findIncident(state, id);
+  if (!inc) return fail(`No incident found with id '${id}'. Run 'sre list' to see known incidents.`);
+
+  console.log(`${inc.id}: ${headlineOf(inc)}`);
+  console.log(
+    `status: ${inc.status || "open"}   confidence: ${confidenceOf(inc)}   opened: ${fmtFull(inc.openedAt)}`,
+  );
+  console.log("");
+
+  const rca = rcaOf(inc);
+  if (rca) {
+    console.log("Root cause:");
+    console.log(rca);
+
+    const ledger = new Ledger(state);
+    const check = ledger.validate(rca);
+    if (check.cited.length && !check.ok) {
+      console.log(`\n⚠ unresolved citation(s): ${check.unresolved.join(", ")} — these do not resolve to a recorded evidence entry.`);
+    } else if (!check.cited.length) {
+      console.log("\n⚠ this root-cause text cites no [E#] evidence — unverifiable claim.");
+    }
+  } else {
+    console.log("No root-cause analysis recorded yet for this incident.");
+  }
+
+  const steps = resolutionStepsOf(inc);
+  if (steps.length) {
+    console.log("\nResolution steps:");
+    steps.forEach((s, i) => console.log(`  ${i + 1}. ${s}`));
+  }
+}
+
+function cmdEvidence(state, id) {
+  if (!id) return fail("Usage: sre evidence <evidence-id>");
+  const ledger = new Ledger(state);
+  const entry = ledger.get(id);
+  if (!entry) return fail(`No evidence found with id '${id}'. Run 'sre why <incident-id>' to find cited ids.`);
+
+  console.log(`${entry.id}  [${entry.kind}]  ${entry.at}`);
+  if (entry.target) console.log(`target: ${entry.target}`);
+  console.log(`query: ${entry.query}`);
+  if (entry.summary) console.log(`summary: ${entry.summary}`);
+  console.log("\nraw response:");
+  console.log(JSON.stringify(entry.raw, null, 2));
+}
+
+// Renders one timeline/revision event generically, since its exact field names come from
+// the investigator lane and weren't frozen when this file was written.
+function describeEvent(e) {
+  const parts = [];
+
+  const hypothesis = firstDefined(e, ["hypothesis", "thought"]);
+  if (hypothesis) parts.push(`hypothesis: ${hypothesis}`);
+
+  const query = firstDefined(e, ["query", "action"]);
+  if (query) parts.push(`queried: ${query}`);
+
+  const evRaw = firstDefined(e, ["evidence", "evidenceIds", "evidenceId"]);
+  const evIds = evRaw === undefined ? [] : [].concat(evRaw);
+  if (evIds.length) parts.push(`evidence: [${evIds.join(", ")}]`);
+
+  const conf = firstDefined(e, ["confidence"]);
+  if (conf) parts.push(`confidence: ${conf}`);
+
+  const revisionNote = firstDefined(e, ["revised", "revision", "note", "reason", "change"]);
+  if (revisionNote) {
+    parts.push(`revised: ${typeof revisionNote === "string" ? revisionNote : JSON.stringify(revisionNote)}`);
+  }
+
+  if (!parts.length) {
+    const fallbackText = firstDefined(e, ["text", "summary"]);
+    parts.push(fallbackText || JSON.stringify(e));
+  }
+
+  return parts.join(" — ");
+}
+
+function cmdTimeline(state, id) {
+  if (!id) return fail("Usage: sre timeline <incident-id>");
+  const inc = findIncident(state, id);
+  if (!inc) return fail(`No incident found with id '${id}'. Run 'sre list' to see known incidents.`);
+
+  const unifiedTimeline = firstArray(inc, ["timeline", "hypotheses"]);
+  const hypothesisEvents = (unifiedTimeline.length ? unifiedTimeline : inc.revisions || []).map((e) => ({
+    ...e,
+    _kind: "hypothesis",
+  }));
+  const stepEvents = (inc.steps || []).map((e) => ({ ...e, _kind: "step" }));
+
+  const events = [...hypothesisEvents, ...stepEvents];
+  if (!events.length) {
+    console.log(`No timeline recorded yet for ${inc.id}.`);
+    return;
+  }
+
+  events.sort((a, b) => {
+    const ta = a.at ? new Date(a.at).getTime() : 0;
+    const tb = b.at ? new Date(b.at).getTime() : 0;
+    return ta - tb;
+  });
+
+  console.log(`Timeline for ${inc.id}:`);
+  let lastHypothesis = null;
+  for (const e of events) {
+    const bullet = e._kind === "hypothesis" ? "↻" : "•";
+    const when = e.at ? fmtClock(e.at) : "?";
+    let line = `  ${bullet} [${when}] ${describeEvent(e)}`;
+
+    const hyp = firstDefined(e, ["hypothesis", "thought"]);
+    if (hyp && lastHypothesis && hyp !== lastHypothesis) {
+      line += `  (revised from: "${lastHypothesis}")`;
+    }
+    if (hyp) lastHypothesis = hyp;
+
+    console.log(line);
+  }
+}
+
+function cmdStart() {
+  // runDaemon() is async and never resolves by design (it loops until killed), so a
+  // rejection from it would otherwise surface as an unhandled promise rejection rather
+  // than the synchronous try/catch below catching it — handle it explicitly here instead.
+  // eslint-disable-next-line global-require
+  const { runDaemon } = require("../src/sentinel/daemon");
+  return runDaemon().catch((err) => {
+    console.error(`sre: daemon failed: ${err.message}`);
+    process.exitCode = 1;
+  });
+}
+
+function fail(msg) {
+  console.error(msg);
+  process.exitCode = 1;
+}
+
+function usage() {
+  console.log(`Usage: sre <command> [args]
+
+Commands:
+  status                   headline: open incidents, or all-clear + last sweep
+  list                     one line per incident
+  why <incident-id>        cited root-cause + resolution steps
+  evidence <evidence-id>   full raw query + response for one evidence entry
+  timeline <incident-id>   hypothesis history, in order, with revisions
+  start                    (stub) start the sentinel daemon loop
+`);
+}
+
+function main() {
+  const [cmd, arg] = process.argv.slice(2);
+  if (!cmd || cmd === "help" || cmd === "--help" || cmd === "-h") return usage();
+  if (cmd === "start") return cmdStart();
+
+  const state = load();
+
+  switch (cmd) {
+    case "status":
+      return cmdStatus(state);
+    case "list":
+      return cmdList(state);
+    case "why":
+      return cmdWhy(state, arg);
+    case "evidence":
+      return cmdEvidence(state, arg);
+    case "timeline":
+      return cmdTimeline(state, arg);
+    default:
+      console.error(`Unknown command '${cmd}'.\n`);
+      usage();
+      process.exitCode = 1;
+  }
+}
+
+try {
+  main();
+} catch (err) {
+  console.error(`sre: ${err.message}`);
+  process.exitCode = 1;
+}

@@ -1,0 +1,16 @@
+name: product-catalog-availability
+service: product-catalog
+sli_query_good: >
+  sum(rate(traces_span_metrics_calls_total{service_name="product-catalog", status_code!="STATUS_CODE_ERROR"}[5m]))
+sli_query_total: >
+  sum(rate(traces_span_metrics_calls_total{service_name="product-catalog"}[5m]))
+objective_pct: 99.5
+rationale: >
+  product-catalog carries service_criticality="high" on traces_span_metrics_calls_total
+  (docs/TELEMETRY.md) — high-tier services in this fleet are the standing target for 99.5%
+  availability this quarter. This number is not evaluated anywhere in code as a live
+  incident gate: whether today's reading constitutes an incident worth an RCA is the
+  investigating agent's live judgement (see alert-rules/product-catalog-error-rate.yaml),
+  made from evidence gathered at the time. This file exists for burn-rate/postmortem framing
+  only — "how much of the quarterly budget did this incident spend" — never as an if/else
+  condition.

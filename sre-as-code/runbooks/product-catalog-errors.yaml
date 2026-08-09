@@ -1,0 +1,25 @@
+title: Product catalog erroring
+service: product-catalog
+trigger_description: >
+  The agent judged product-catalog's error rate/ratio (see alert-rules/product-catalog-error-rate.yaml)
+  anomalous against its own recent baseline — not a fixed threshold breach, a live comparison.
+steps:
+  - Pull both error rate and error ratio for product-catalog over the last 5m
+    (traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR"} vs. the same query as a
+    ratio) — low-QPS faults show up in ratio, high-QPS ones in rate; collect both per
+    docs/TELEMETRY.md trap #2.
+  - Run compare_baseline against the same query offset 1h to see whether this is a step
+    change or normal background noise.
+  - Search Tempo with `{status=error && resource.service.name="product-catalog"}
+    | select(event.exception.message, span.error.reason)` — event.exception.message has
+    previously surfaced the exact fault (including a feature-flag string like
+    "cartFailure") more precisely than span status alone.
+  - Cross-check Loki `{service_name="opentelemetry-demo/product-catalog", level="ERROR"}`
+    over the same window to corroborate the trace-level finding with a log line.
+  - If the traced exception names a feature-flag fault (a string like
+    "productCatalogFailure"), record that in the incident's RCA with citations and resolve
+    at the flag layer — this is an operator action, not a code bug, and should be reported
+    as such rather than papered over with a code change nobody needed.
+  - If the traced exception instead points to a real code path (e.g. an unhandled lookup on
+    unexpected input), draft the fix as a proposal and open a real PR against the onboarded
+    repo — do not stop at restating this runbook as the resolution.

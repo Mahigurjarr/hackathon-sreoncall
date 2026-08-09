@@ -1,0 +1,22 @@
+name: product-catalog-error-rate
+service: product-catalog
+signal:
+  type: promql
+  # Absent-safe: product-catalog can legitimately return zero series (no traffic yet) rather
+  # than a real zero — the trailing `or (... * 0)` term (verified live, docs/TELEMETRY.md
+  # trap #1) turns that silent absence into an explicit zero so it's never mistaken for "no
+  # data" instead of "no errors."
+  query: >
+    sum by (service_name) (rate(traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR", service_name="product-catalog"}[5m]))
+      or (sum by (service_name) (rate(traces_span_metrics_calls_total{service_name="product-catalog"}[5m])) * 0)
+rationale: >
+  traces_span_metrics_calls_total is the only metric family every service in this fleet
+  emits (18/18, docs/TELEMETRY.md) — http_server_request_duration_seconds_* does not cover
+  product-catalog at all, so building this rule on that instead would silently miss faults.
+  There is no threshold attached on purpose: whether a given error-rate reading here is a
+  real incident (a genuine spike vs. normal background noise vs. a known-benign pattern like
+  the flagd long-poll floor) is a judgement the investigating agent makes by comparing this
+  signal's live value against its own recent baseline (`compare_baseline`) and correlating
+  it with Tempo span events (`event.exception.message` has previously surfaced the exact
+  fault-flag string responsible, e.g. for `productCatalogFailure`) — not a static comparison
+  encoded here.

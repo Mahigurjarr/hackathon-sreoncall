@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+.hackathon-team.json
+node_modules
+web/node_modules
+web/dist
+store/*.json
+fixtures
+reference
+docs
+build-guide.html
+*.md
+.claude

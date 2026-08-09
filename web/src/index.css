@@ -1,0 +1,159 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
+
+/*
+  ---break---
+*/
+@custom-variant dark (&:is(.dark *));
+
+/*
+  Design read: an internal SRE ops console for on-call engineers watching a live
+  microservices fleet ("Astronomy Shop"). Cockpit density, dark-tech, evidence-first.
+  Theme is locked dark — this is an ops tool, not a marketing site, so there is no
+  light/.dark toggle (see design-taste-frontend skill, Page Theme Lock: pick one theme,
+  lock it). shadcn's own generated components still reference standard token names
+  (--primary, --border, etc.) — mapped below to our chosen values instead of shadcn's
+  default light/dark pair.
+
+  Signature accent (--signal) is a distinct teal, not the generic AI-purple/blue-glow
+  default and not a lifted brand color — grounded in the subject: this is telemetry,
+  a live "signal" the agent is watching.
+
+  Severity colors are a SEPARATE token family from --signal. --signal never appears on
+  a severity badge, and severity colors never appear on brand chrome (nav, primary CTA).
+  Mixing the two would make "something is on fire" indistinguishable from "click here."
+*/
+
+:root {
+  --background: #0a0e14;
+  --surface: #10151d;
+  --surface-2: #161c26;
+  --border: #232b38;
+  --border-strong: #323d4f;
+
+  --foreground: #e6eaf0;
+  --muted-text: #8b95a5;
+  --muted-text-2: #5c6675;
+
+  --signal: #5eead4;
+  --signal-foreground: #04120f;
+  --signal-dim: rgba(94, 234, 212, 0.14);
+
+  --severity-critical: #f87171;
+  --severity-critical-bg: rgba(248, 113, 113, 0.12);
+  --severity-high: #fb923c;
+  --severity-high-bg: rgba(251, 146, 60, 0.12);
+  --severity-medium: #fbbf24;
+  --severity-medium-bg: rgba(251, 191, 36, 0.12);
+  --severity-low: #60a5fa;
+  --severity-low-bg: rgba(96, 165, 250, 0.12);
+  --severity-ok: #4ade80;
+  --severity-ok-bg: rgba(74, 222, 128, 0.1);
+
+  --radius: 0.625rem;
+  color-scheme: dark;
+
+  /* shadcn standard tokens, mapped to the palette above (dark-locked, no separate .dark block) */
+  --card: var(--surface);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface-2);
+  --popover-foreground: var(--foreground);
+  --primary: var(--signal);
+  --primary-foreground: var(--signal-foreground);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--muted-text);
+  --accent: var(--surface-2);
+  --accent-foreground: var(--foreground);
+  --destructive: var(--severity-critical);
+  --destructive-foreground: #150707;
+  --input: var(--border);
+  --ring: var(--signal);
+}
+
+@theme inline {
+  --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-muted-text: var(--muted-text);
+  --color-muted-text-2: var(--muted-text-2);
+  --color-signal: var(--signal);
+  --color-signal-foreground: var(--signal-foreground);
+  --color-signal-dim: var(--signal-dim);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/*
+  The signature motion of this dashboard: a healthy, monitored service breathes —
+  a slow, quiet pulse that says "being watched, nothing wrong." The moment an
+  incident opens, the pulse stops outright and the tile snaps to a solid severity
+  color (handled in JS via a state change, not CSS) — stopping is itself the signal,
+  not just the color change. Motivated motion, not decoration (frontend-design skill).
+*/
+@keyframes signal-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--signal-dim);
+  }
+  50% {
+    box-shadow: 0 0 0 6px var(--signal-dim);
+  }
+}
+.signal-pulse {
+  animation: signal-pulse 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

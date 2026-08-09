@@ -10,5 +10,13 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(curl http://10.10.1.141:4001/*)",
+      "Bash(curl -s http://10.10.1.141:4001/*)",
+      "Bash(curl -X POST http://10.10.1.141:4001/*)",
+      "Bash(curl -s -X POST http://10.10.1.141:4001/*)"
+    ]
   }
 }

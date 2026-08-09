@@ -1,0 +1,12 @@
+services:
+  sreoncall:
+    build: .
+    ports:
+      - "8420:8420"
+    env_file:
+      - .env
+    volumes:
+      # state.json survives container restarts and stays visible/editable on the host —
+      # bin/sre run directly (outside Docker) sees the exact same state.
+      - ./store:/app/store
+    restart: unless-stopped
