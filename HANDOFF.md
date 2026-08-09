@@ -102,7 +102,7 @@ mounted read-only into both containers.
 | Trait | Where |
 |---|---|
 | Observability | `src/lgtm/health.js` probes all 18 services every sweep; `silent` is reported distinctly from `reporting` |
-| Agency | `src/sentinel/daemon.js` runs forever, opens incidents and drafts fixes with no human trigger |
+| Agency | `src/sentinel/daemon.js` runs forever, opens incidents and drafts fixes with no human trigger; `stalledIncidents()` also finishes its OWN unfinished work — an incident diagnosed but never decided on gets its remediation decision, unprompted, bounded to 2 per sweep |
 | Auditability | `src/evidence/ledger.js` assigns `[E#]` at query time; unresolved citations surface as warnings; every `[E#]` chip opens the raw query + response |
 | Malleability | Hypothesis trail (`NEW`/`DISCONFIRMED`/`REVISED`/`CONFIRMED`); "Push back" re-authors a fix from a human objection |
 | Progressive disclosure | Four layers: headline → intent → analysis → raw evidence. No unbounded list renders inline |

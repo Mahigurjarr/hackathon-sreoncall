@@ -112,6 +112,33 @@ function escalatedRisks(allEmergingRisks, newlyNoted) {
   return escalated;
 }
 
+// How many stalled incidents to finish per sweep. A bound, not a policy: it stops a large
+// backlog from consuming one sweep's entire budget and starving fresh detection, which is
+// always the more time-critical work. The backlog drains over several sweeps instead.
+const RESUME_PER_SWEEP = 2;
+
+// An incident with a concluded RCA and no remediation outcome is the agent's OWN unfinished
+// work. It happens for real reasons — the process died between investigating and deciding, a
+// draftRemediation call failed, or (as in this repo's own history) the incident predates the
+// remediation path being wired into the loop at all. Whatever the cause, the result is the
+// same: a diagnosis nobody ever decided what to do about, sitting open forever because
+// nothing revisits it.
+//
+// Noticing that and finishing it is initiative, not cleanup. It is also the difference between
+// an agent that is accountable for what it started and one that only ever looks forward. Note
+// what this deliberately does NOT do: it never marks anything resolved, never assumes the
+// incident is stale, and never invents an outcome — it runs the same model-driven decision the
+// incident should have had, including the freedom to conclude no_code_fix.
+//
+// A `remediation` recording a previous FAILURE counts as finished, not stalled: that attempt
+// is a recorded outcome, and retrying it every 45s forever would be exactly the blind retry
+// loop sreoncall-agency says an experienced engineer does not do.
+function stalledIncidents(state) {
+  return (state.incidents || []).filter(
+    (inc) => !TERMINAL_STATUSES.has(inc.status) && inc.rca && !inc.remediation
+  );
+}
+
 // Records what the remediation author decided onto the incident itself, so the dashboard can
 // show "the agent has a fix ready" without re-deriving it from the proposals list.
 function recordRemediationOutcome(incidentId, outcome) {
@@ -429,6 +456,28 @@ async function sweepOnce() {
     }
   }
 
+  // Finishing what earlier sweeps started: an incident diagnosed but never decided on gets its
+  // remediation decision now, unprompted. Bounded per sweep so a backlog never starves fresh
+  // detection, and settled independently — one stalled incident failing again must not cost
+  // the others their turn.
+  const resumed = await Promise.all(
+    stalledIncidents(store.load()).slice(0, RESUME_PER_SWEEP).map(async (incident) => {
+      try {
+        await attachRemediation(incident, new Ledger(), null);
+        // Same unconditional rule as a fresh incident: whatever it decided is a claim about
+        // the world, so it gets checked later regardless of which branch fired.
+        scheduleRedemption(incident.id, "remediation decided on a previously stalled incident");
+        return { ok: true, id: incident.id };
+      } catch (err) {
+        return { ok: false, id: incident.id, error: err.message };
+      }
+    })
+  );
+  for (const r of resumed) {
+    if (r.ok) console.log(`[sentinel] finished stalled ${r.id} — remediation decided`);
+    else console.error(`[sentinel] could not finish stalled ${r.id}: ${r.error}`);
+  }
+
   // Closing the loop on incidents opened by earlier sweeps: re-verify whatever came due, so
   // "applied"/"declined" can become "confirmed resolved" (or, just as importantly, surface as
   // "didn't hold") with fresh cited evidence rather than sitting as an unchecked claim forever.
@@ -440,7 +489,14 @@ async function sweepOnce() {
     if (s.telemetry) s.telemetry.lastAnalyzedAt = completedAt;
   });
 
-  return { ...decision, escalatedCount: escalated.length, opened, failed, redemptions };
+  return {
+    ...decision,
+    escalatedCount: escalated.length,
+    opened,
+    failed,
+    redemptions,
+    resumed: resumed.filter((r) => r.ok).map((r) => r.id),
+  };
 }
 
 async function runDaemon({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
@@ -509,6 +565,7 @@ module.exports = {
   sweepOnce, runDaemon, openIncidentFromInvestigation, attachRemediation,
   deriveConfidence, extractHeadline, extractResolutionSteps, hasOpenIncidentFor, errorRecord,
   escalatedRisks, RISK_ESCALATION_COUNT, RISK_ESCALATION_WINDOW_MS,
+  stalledIncidents, RESUME_PER_SWEEP,
 };
 
 if (require.main === module) {
