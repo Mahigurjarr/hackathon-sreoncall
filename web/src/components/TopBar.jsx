@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { GitPullRequest, ShieldCheck } from "lucide-react";
 import { LiveCounter } from "@/components/LiveCounter";
 import { PracticesSheet } from "@/components/PracticesSheet";
+import { formatUtcTime } from "@/lib/time";
 
 // The header, under law 1 (hierarchy is size and stillness, not colour).
 //
@@ -16,7 +17,7 @@ const AWAITING = new Set(["draft", "revised", "apply_failed"]);
 export function TopBar({ state, proposals = [], onSelectIncident }) {
   const [showPractices, setShowPractices] = useState(false);
   const openCount = state.incidents.filter((i) => !["resolved", "closed", "mitigated"].includes(i.status)).length;
-  const lastSweep = state.lastSweep ? new Date(state.lastSweep).toLocaleTimeString() : "never";
+  const lastSweep = state.lastSweep ? formatUtcTime(state.lastSweep) : "never";
   const practicesMissing = (state.practices || []).some((p) => !p.present);
 
   const awaiting = proposals.filter((p) => AWAITING.has(p.status));

@@ -2,10 +2,12 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronRight, GitPullRequest, Check, X, MessageSquare, Loader2, ExternalLink, AlertTriangle,
-  ShieldCheck, ShieldAlert, Clock,
+  ShieldCheck, ShieldAlert, Clock, CheckCircle2,
 } from "lucide-react";
 import { CitedText } from "@/components/CitedText";
 import { approveProposal, reviseProposal, rejectProposal } from "@/lib/api";
+import { leadOf, downtimeOf } from "@/lib/incident";
+import { formatUtcTime, formatUtcDateTime, formatDuration } from "@/lib/time";
 
 // Ownership, as a surface rather than a claim.
 //
@@ -140,8 +142,42 @@ export function OwnershipPanel({ incident, proposals, github, onCite, onChanged 
   const actionable = proposal && ["draft", "revised", "apply_failed"].includes(proposal.status);
   const status = proposal ? STATUS_STYLE[proposal.status] || STATUS_STYLE.draft : null;
 
+  const downtime = downtimeOf(incident);
+
   return (
     <div className="flex flex-col gap-3 p-4">
+      {/* --- RESOLVED SUMMARY — the whole postmortem in one glance, in the app, for anyone who
+          opens this incident after the fact. Root cause, downtime, and the evidence that
+          proved recovery — before anything else on the page. This IS "sharing the RCA": it
+          lives where a reviewer already looks, rather than in a separate export/integration. */}
+      {incident.status === "resolved" && (
+        <div className="rounded-lg border border-severity-ok/40 bg-severity-ok-bg p-3.5">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="size-4 text-severity-ok" />
+            <span className="t-label font-medium tracking-wide text-severity-ok">RESOLVED</span>
+            {downtime && (
+              <span className="ml-auto rounded border border-severity-ok/40 bg-surface/50 px-1.5 py-0.5 font-mono t-micro font-medium text-severity-ok">
+                DOWNTIME {formatDuration(downtime.ms)}
+              </span>
+            )}
+          </div>
+
+          <p className="mt-2 t-display leading-snug text-foreground">{leadOf(incident)}</p>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 t-label text-muted-text-2">
+            <span>opened {formatUtcDateTime(incident.openedAt)}</span>
+            {incident.resolvedAt && <span>· resolved {formatUtcDateTime(incident.resolvedAt)}</span>}
+          </div>
+
+          {incident.redemption?.reason && (
+            <div className="mt-2.5 border-t border-severity-ok/20 pt-2.5">
+              <p className="t-label font-medium text-foreground">How the agent confirmed it:</p>
+              <CitedText text={incident.redemption.reason} onCite={onCite} className="mt-1 text-muted-text" />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* --- The headline decision: what the agent wants to do about this, in one glance --- */}
       <div className="rounded-lg border border-border bg-surface p-3.5">
         <div className="flex items-center gap-2">
@@ -313,8 +349,10 @@ export function OwnershipPanel({ incident, proposals, github, onCite, onChanged 
       </div>
 
       {/* --- Redemption: did the decision above actually hold? Closes the loop from
-          "PR opened" / "declined" to "verified" — the step most agent demos skip. --- */}
-      {incident.redemption && (
+          "PR opened" / "declined" to "verified" — the step most agent demos skip.
+          Skipped once CONFIRMED: the resolved summary banner above already shows this exact
+          reason at the top of the page, and showing it twice is noise, not confirmation. --- */}
+      {incident.redemption && incident.redemption.status !== "confirmed" && (
         <div className="rounded-lg border border-border bg-surface p-3.5">
           <div className="flex items-center gap-2">
             {REDEMPTION_ICON[incident.redemption.status] || REDEMPTION_ICON.pending}
@@ -331,7 +369,7 @@ export function OwnershipPanel({ incident, proposals, github, onCite, onChanged 
           {incident.redemption.status === "pending" && !incident.redemption.reason && (
             <p className="mt-2 t-body text-muted-text">
               Scheduled to re-check with fresh evidence at{" "}
-              {new Date(incident.redemption.dueAt).toLocaleTimeString()} — {incident.redemption.note}
+              {formatUtcTime(incident.redemption.dueAt)} — {incident.redemption.note}
             </p>
           )}
 
@@ -347,7 +385,7 @@ export function OwnershipPanel({ incident, proposals, github, onCite, onChanged 
               <CitedText text={incident.redemption.reason} onCite={onCite} className="mt-1 text-muted-text" />
               <p className="mt-1.5 t-label text-muted-text-2">
                 {incident.redemption.confidence} confidence · checked{" "}
-                {new Date(incident.redemption.checkedAt).toLocaleString()}
+                {formatUtcDateTime(incident.redemption.checkedAt)}
               </p>
             </div>
           )}
@@ -398,7 +436,7 @@ export function OwnershipPanel({ incident, proposals, github, onCite, onChanged 
                 {proposal.revisions.map((r, i) => (
                   <li key={i} className="border-l-2 border-border-strong pl-3">
                     <p className="t-micro font-medium tracking-wide text-muted-text-2">
-                      REVIEWER · {new Date(r.at).toLocaleString()}
+                      REVIEWER · {formatUtcDateTime(r.at)}
                     </p>
                     <p className="mt-0.5 t-body text-foreground">{r.feedback}</p>
                     <p className="mt-1 t-label text-muted-text">

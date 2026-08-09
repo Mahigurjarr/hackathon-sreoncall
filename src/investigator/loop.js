@@ -118,7 +118,10 @@ root-cause text, including exception messages that can name the exact failing me
 When you're done, write your final message as the root-cause analysis, structured like this:
 
 1. A 2-3 line headline: the responsible service, the mechanism, and your confidence — every
-   factual clause cited. Someone reading only this should already know what's wrong.
+   factual clause cited. Someone reading only this should already know what's wrong. Write it
+   in plain words a non-engineer could follow ("checkout can't reach the payment service"),
+   not raw telemetry jargon ("gRPC UNAVAILABLE, DNS NXDOMAIN") — save the exact status code or
+   error string for the cited evidence one click away, not the headline itself.
 2. "Evidence:" the handful of [E#] entries that matter most and what each one showed.
 3. "Hypothesis trail:" one line per HYPOTHESIS tag you raised, in order, so the reader can
    see what you ruled out and why — not just the surviving conclusion.

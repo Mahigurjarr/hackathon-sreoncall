@@ -55,6 +55,19 @@ export function leadOf(inc) {
     .trim();
 }
 
+// Downtime is `resolvedAt - openedAt` once the redemption loop actually closes an incident
+// (src/actions/redemption.js is the only code path that sets resolvedAt) — never a guess and
+// never left to the reader to compute from two ISO strings. While still open, this reports
+// elapsed time so far, flagged `ongoing: true`, since "how long has this been broken" is a
+// real, useful number even before there's a resolution to measure against.
+export function downtimeOf(inc) {
+  if (!inc.openedAt) return null;
+  const start = new Date(inc.openedAt).getTime();
+  const end = inc.resolvedAt ? new Date(inc.resolvedAt).getTime() : Date.now();
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  return { ms: Math.max(0, end - start), ongoing: !inc.resolvedAt };
+}
+
 export function timelineOf(inc) {
   const unified = firstArray(inc, ["timeline", "hypotheses"]);
   const hypothesisEvents = (unified.length ? unified : inc.revisions || []).map((e) => ({ ...e, kind: "hypothesis" }));

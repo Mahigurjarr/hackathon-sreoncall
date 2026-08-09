@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getEvidence } from "@/lib/api";
+import { formatUtcDateTime } from "@/lib/time";
 
 // The "show me the evidence" drill-down — auditability made concrete. Clicking any
 // [E7] citation anywhere in the app opens this with the literal query and raw
@@ -36,7 +37,7 @@ export function EvidenceSheet({ id, onClose }) {
             <>
               <div className="flex items-center gap-2 t-label text-muted-text">
                 <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono uppercase">{entry.kind}</span>
-                <span>{new Date(entry.at).toLocaleString()}</span>
+                <span>{formatUtcDateTime(entry.at)}</span>
               </div>
               {entry.target && <p className="t-label text-muted-text">target: {entry.target}</p>}
               <div>

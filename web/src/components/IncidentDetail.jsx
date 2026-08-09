@@ -7,7 +7,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { CitedText } from "@/components/CitedText";
 import { EvidenceSheet } from "@/components/EvidenceSheet";
 import { OwnershipPanel } from "@/components/OwnershipPanel";
-import { leadOf, serviceOf, confidenceOf, rcaOf, timelineOf } from "@/lib/incident";
+import { leadOf, serviceOf, confidenceOf, rcaOf, timelineOf, downtimeOf } from "@/lib/incident";
+import { formatUtcTime, formatUtcDateTime, formatDuration } from "@/lib/time";
 
 // Progressive disclosure, structurally rather than decoratively.
 //
@@ -54,6 +55,7 @@ export function IncidentDetail({ incident, proposals = [], github, onRefresh }) 
   const confidence = confidenceOf(incident);
   const rca = rcaOf(incident);
   const timeline = timelineOf(incident);
+  const downtime = downtimeOf(incident);
 
   // Surfaced in the tab label so the reviewer can see there's something waiting on them
   // without opening the tab first.
@@ -81,6 +83,21 @@ export function IncidentDetail({ incident, proposals = [], github, onRefresh }) 
         <h2 className="mt-1.5 t-display font-medium leading-snug text-foreground">
           {leadOf(incident)}
         </h2>
+
+        {/* Opened + downtime — always visible, layer 1. Every timestamp in this app is UTC,
+            labelled as such, so a reviewer in a different timezone reads the same clock time
+            an on-call engineer would. Downtime is exact (openedAt → resolvedAt), computed
+            once by lib/incident.js's downtimeOf, never left for a reader to subtract. */}
+        {downtime && (
+          <p className="mt-1 t-label text-muted-text-2">
+            opened {formatUtcDateTime(incident.openedAt)}
+            {incident.resolvedAt ? (
+              <> · resolved {formatUtcDateTime(incident.resolvedAt)} · downtime {formatDuration(downtime.ms)}</>
+            ) : (
+              <> · ongoing {formatDuration(downtime.ms)}</>
+            )}
+          </p>
+        )}
 
         {/* What memory did to this investigation. Shown here rather than buried, because
             "the agent recognised this and spent a quarter of the budget" is a claim that
@@ -180,7 +197,7 @@ export function IncidentDetail({ incident, proposals = [], github, onRefresh }) 
                         <span className={statusCls}>
                           {tag.label}{e.status ? `[${e.status}]` : ""}
                         </span>
-                        {e.at && <span className="text-muted-text-2">{new Date(e.at).toLocaleTimeString()}</span>}
+                        {e.at && <span className="text-muted-text-2">{formatUtcTime(e.at)}</span>}
                       </span>
                       <CitedText text={e.hypothesis || e.thought || e.query || e.text} onCite={setCitedId} />
                     </div>

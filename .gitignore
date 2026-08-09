@@ -5,3 +5,7 @@
 .env.*.local
 node_modules/
 .DS_Store
+
+# Cross-process lockfile around store/state.json writes (src/store/state.js) — exists only
+# transiently while a write is in flight; never meaningful to commit.
+store/state.json.lock

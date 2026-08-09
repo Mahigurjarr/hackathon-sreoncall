@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
 import { serviceOf, isOpen, leadOf } from "@/lib/incident";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatUtcTime } from "@/lib/time";
 
 // THE SIGNATURE ELEMENT — the fleet, as one instrument.
 //
@@ -190,7 +191,7 @@ export function FleetStrip({ services, incidents, health, onSelectIncident }) {
         </span>
         {health?.at && (
           <span className="ml-auto t-label text-muted-text-2">
-            probed {new Date(health.at).toLocaleTimeString()}
+            probed {formatUtcTime(health.at)}
           </span>
         )}
       </div>

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { AlertTriangle, EyeOff, GitPullRequest, Activity } from "lucide-react";
 import { CitedText } from "@/components/CitedText";
 import { leadOf } from "@/lib/incident";
+import { formatUtcTime } from "@/lib/time";
 
 // The board for someone who is not an engineer.
 //
@@ -119,7 +120,7 @@ export function Overview({ state, onSelectIncident, onCite }) {
           <span className="t-micro text-muted-text-2">How the shop is doing right now</span>
           {health?.at && (
             <span className="ml-auto t-label text-muted-text-2">
-              checked {new Date(health.at).toLocaleTimeString()}
+              checked {formatUtcTime(health.at)}
             </span>
           )}
         </div>
