@@ -5,9 +5,13 @@ Written so a fresh session can pick this up without re-deriving anything. Read t
 
 ## Status right now — read this first
 
-- **Everything is committed and pushed.** `main` is at `afa5c17`, remote in sync.
+- **Everything is committed and pushed.** `main` is at `310c4a5`, remote in sync.
   - `9306599` — ownership + self-learning wired in, console redesign, container split
-  - `afa5c17` — the agent's runtime state (`store/state.json`)
+  - `fade870` — malleability policy layer, concurrent detection fan-out, citation repair
+  - `310c4a5` — MCP server, the committed safety tests, `/api/state` payload trim
+- **Run the tests before you change anything**: `npm test` (39 assertions, no deps, ~100ms).
+  They encode the ownership guarantees, not just behaviour — if one fails, the agent has
+  gained the ability to publish something a human never approved.
 - **`store/state.json` will always show as modified.** The sentinel rewrites it every ~45s,
   so `git status` is dirty within seconds of any commit. **This is not an error and does not
   mean a push failed.** It is runtime data, not code.
@@ -67,6 +71,20 @@ sentinel container                          api container
               actions/remediation.js → propose_fix | no_code_fix
                                        └─ proposals.js draft → approve → github.js PR
 ```
+
+A third entry point, not part of either container: `node src/mcp/server.js` (registered in
+`.mcp.json` as `sreoncall`). It serves the same read tools and the same draft-then-approve
+proposal machinery over MCP stdio, so any model client — Claude Code, the reference platform's
+orchestrator, another agent — can query this fleet's evidence and draft a gated fix. It
+exposes **no** approve tool, **no** apply tool and **no** write path to the fleet, and refuses
+a `propose_*` call outright when a path is outside `ALLOWED_PREFIXES` or the body cites an
+evidence id that does not exist. Zero deps: MCP over stdio is JSON-RPC.
+
+`/api/state` withholds raw log/trace bodies from the wire (`trimEvidenceForWire`) and flags
+them `rawAvailable` — 8.0MB → 1.3MB per poll. Nothing is deleted: the full record stays on
+disk and `/api/evidence/:id` still serves it. **Only the transport is trimmed, never what the
+agent can see** — `test/api-payload.test.js` exists because those two are one careless edit
+apart.
 
 Both containers share `./store/state.json` (bind mount). `src/store/state.js` takes a
 cross-process lockfile around every read-modify-write — **do not remove it**, or a sweep can
@@ -147,6 +165,13 @@ stop decisions drifting, not as documentation.
    The board was last seen scoring an older commit — showing `Self-learning: 0` and
    `Agency: 80` ("PR machinery not wired into the running daemon path"), both since fixed.
    Team id is `team-3`; never ask for it, it's in `.hackathon-team.json` and `.env`.
+
+5. **`store/state.json` grows without bound** — ~15MB after a day of sweeping, almost all of
+   it raw log/trace bodies in the evidence ledger. The wire payload is trimmed, so the
+   dashboard no longer feels it, but the file itself and the lock-protected read-modify-write
+   around it still get slower. If this needs solving: archive old raw bodies out to
+   `store/archive/`, keeping the ledger entries themselves intact. **Do not "fix" it by
+   dropping evidence** — the citations must stay resolvable.
 
 ## Minor known issues
 
