@@ -14,7 +14,7 @@ already performed. It is not a second incident detector and it is not a generic 
 - Suggested actions are navigation into an existing incident or reviewable proposal. The
   workspace cannot approve or execute a proposal; the existing human gate remains intact.
 - Conversation turns, role, context, citations, limitations, and suggested action are
-  persisted under `copilotConversations` in `store/state.json` for auditability.
+  persisted as `copilotConversations` in the store (`store/state.db`) for auditability.
 
 ## API contract
 

@@ -12,9 +12,11 @@ Written so a fresh session can pick this up without re-deriving anything. Read t
 - **Run the tests before you change anything**: `npm test` (39 assertions, no deps, ~100ms).
   They encode the ownership guarantees, not just behaviour — if one fails, the agent has
   gained the ability to publish something a human never approved.
-- **`store/state.json` will always show as modified.** The sentinel rewrites it every ~45s,
-  so `git status` is dirty within seconds of any commit. **This is not an error and does not
-  mean a push failed.** It is runtime data, not code.
+- **State lives in SQLite now** (`store/state.db`, via `node:sqlite` — still zero npm deps).
+  It is gitignored, so `git status` stays clean between commits. `store/state.json` is the
+  frozen pre-migration snapshot, imported automatically on first boot of an empty database —
+  which is also how a fresh clone comes up with real incidents to look at. `npm run
+  state:export` writes the live state back out as plain JSON.
 - **Both containers are running** (`api`, `sentinel`), dashboard at http://localhost:8420.
 - **A re-score was requested** for `team-3` after the last push. Scoring is queued, not
   instant; results appear at https://sreoncall-leaderboard.vercel.app. Re-running `/update`
@@ -166,12 +168,11 @@ stop decisions drifting, not as documentation.
    `Agency: 80` ("PR machinery not wired into the running daemon path"), both since fixed.
    Team id is `team-3`; never ask for it, it's in `.hackathon-team.json` and `.env`.
 
-5. **`store/state.json` grows without bound** — ~15MB after a day of sweeping, almost all of
-   it raw log/trace bodies in the evidence ledger. The wire payload is trimmed, so the
-   dashboard no longer feels it, but the file itself and the lock-protected read-modify-write
-   around it still get slower. If this needs solving: archive old raw bodies out to
-   `store/archive/`, keeping the ledger entries themselves intact. **Do not "fix" it by
-   dropping evidence** — the citations must stay resolvable.
+5. **Two invariants in the store are safety properties, not optimisations.** Evidence is
+   append-only (`load()` withholds most raw bodies, so writing an entry back would erase a
+   real recorded response, and a citation that used to resolve would silently stop). And a
+   failing `update()` rolls back whole. `test/store-substrate.test.js` holds both lines —
+   if you touch `src/store/state.js`, run it.
 
 ## Minor known issues
 

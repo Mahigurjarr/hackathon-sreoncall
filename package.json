@@ -6,6 +6,7 @@
     "test": "node --test test/*.test.js",
     "test:policy": "node --test test/investigator-policy.test.js",
     "test:safety": "node --test test/ownership-safety.test.js",
-    "mcp": "node src/mcp/server.js"
+    "mcp": "node src/mcp/server.js",
+    "state:export": "node -e \"const s=require('./src/store/state');require('node:fs').writeFileSync('store/state.export.json',JSON.stringify(s.exportAll(),null,2));console.log('[store] wrote store/state.export.json')\""
   }
 }

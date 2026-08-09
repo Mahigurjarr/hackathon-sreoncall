@@ -147,7 +147,10 @@ const TOOLS = [
         .filter((e) => !needle || `${e.query} ${e.summary} ${e.target}`.toLowerCase().includes(needle))
         .slice(-limit)
         .reverse()
-        .map(({ raw, ...rest }) => ({ ...rest, raw_available: raw !== undefined && raw !== null }));
+        .map(({ raw, rawAvailable, ...rest }) => ({
+          ...rest,
+          raw_available: rawAvailable === true || (raw !== undefined && raw !== null),
+        }));
     },
   },
   {

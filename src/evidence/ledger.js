@@ -7,6 +7,25 @@
 const store = require("../store/state");
 const { chat, MODELS } = require("../llm/client");
 
+// The next id, taken from the highest number already issued — NOT from the array's length.
+//
+// Length was the original scheme, and it collides: the live ledger had two entirely different
+// PromQL queries both recorded as E88, because two entries were appended within one sweep from
+// different code paths. A duplicate id is not a cosmetic problem. Every claim this agent makes
+// is only checkable because [E#] resolves to the exact query behind it, and a citation that
+// resolves to whichever of two rows is found first is a claim that quietly cannot be verified.
+//
+// Ids are never reused even if an entry is somehow dropped, which is the correct trade: a gap
+// in the numbering is harmless, a reused number is not.
+function nextId(evidence) {
+  let highest = 0;
+  for (const entry of evidence || []) {
+    const n = Number(String(entry?.id || "").slice(1));
+    if (Number.isFinite(n) && n > highest) highest = n;
+  }
+  return `E${highest + 1}`;
+}
+
 class Ledger {
   constructor(state = null) {
     // When handed a live state object, mutate it in place (caller persists).
@@ -25,26 +44,33 @@ class Ledger {
     };
 
     if (this.state) {
-      entry.id = `E${this.state.evidence.length + 1}`;
+      entry.id = nextId(this.state.evidence);
       this.state.evidence.push(entry);
       return entry;
     }
 
     let created;
     store.update((s) => {
-      entry.id = `E${s.evidence.length + 1}`;
+      entry.id = nextId(s.evidence);
       s.evidence.push(entry);
       created = entry;
     });
     return created;
   }
 
+  // Entries as the store hands them over: ids, queries, summaries, and a raw body only for
+  // the readings the dashboard charts. Everything here needs the metadata, not the bodies —
+  // validate() reads ids, repair() reads summaries.
   all() {
     return (this.state || store.load()).evidence;
   }
 
+  // The full record, body included — this is what a citation resolves to, so it must never be
+  // the trimmed copy. Goes straight to the store by id rather than scanning the array, which
+  // is also the difference between one indexed lookup and hydrating the whole ledger.
   get(id) {
-    return this.all().find((e) => e.id === id) || null;
+    if (this.state) return this.state.evidence.find((e) => e.id === id) || null;
+    return store.getEvidence(id);
   }
 
   // Pull [E7] style citations out of model prose.
@@ -111,4 +137,4 @@ class Ledger {
   }
 }
 
-module.exports = { Ledger };
+module.exports = { Ledger, nextId };

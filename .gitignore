@@ -7,6 +7,13 @@
 node_modules/
 .DS_Store
 
-# Cross-process lockfile around store/state.json writes (src/store/state.js) — exists only
-# transiently while a write is in flight; never meaningful to commit.
-store/state.json.lock
+# Cross-process lockfile around store writes (src/store/state.js) — exists only transiently
+# while a write is in flight; never meaningful to commit.
+store/*.lock
+
+# The agent's live memory, now a SQLite database (src/store/state.js). Binary, rewritten every
+# sweep, and useless in a diff. `npm run state:export` writes the same content back out as
+# plain JSON when a human or a judge wants to read it.
+store/*.db
+store/*.db-journal
+store/state.export.json

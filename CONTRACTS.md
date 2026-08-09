@@ -53,14 +53,24 @@ ledger.validate(text)                                -> { ok, unresolved[] } // 
 
 ## `src/store/state.js`
 
-Single JSON file at `store/state.json`. Read-modify-write, no db.
+SQLite at `store/state.db`, via `node:sqlite` — built into Node, so still zero npm
+dependencies. Callers see no difference: `load()` returns one plain object, `update(fn)`
+mutates it in place. `store/state.json` is the frozen pre-migration snapshot, imported once
+on first boot; `npm run state:export` writes the current state back out as plain JSON.
 
 ```js
-load()                    -> state
-save(state)               -> void
-update(fn)                -> state          // fn(state) mutates, then persists
+load()                    -> state          // evidence bodies: recent metrics only, rest flagged rawAvailable
+save(state)               -> void           // replaces everything
+update(fn)                -> state          // fn(state) mutates; one transaction, rolled back if it throws
+getEvidence(id)           -> entry | null   // the full record, body included — what a citation resolves to
+exportAll()               -> state          // everything, bodies included, as plain JSON
 newIncident(fields)       -> incident       // { id:'INC-1', status:'open', evidence:[], revisions:[] }
 ```
+
+Two invariants, both tested in `test/store-substrate.test.js`:
+- **Evidence is append-only.** `load()` withholds most bodies, so writing an entry back would
+  replace a real recorded response with nothing. Existing rows are never updated.
+- **A failed `update()` changes nothing.** The callback runs inside a transaction.
 
 State shape:
 ```js
@@ -108,8 +118,10 @@ Phase 3 (`src/sentinel/`) is built after A lands, by the integrator.
 ## `src/web/server.js` — read-only JSON API for the web dashboard (built)
 
 Zero npm dependencies, `node:http` only, matching the rest of `src/`. No judgement logic —
-pure passthrough of `store/state.json`, the same data `bin/sre` reads, so the CLI and the web
-UI can never disagree about what the backend found.
+pure passthrough of the store, the same data `bin/sre` reads, so the CLI and the web UI can
+never disagree about what the backend found. `/api/state` withholds raw log and trace bodies
+from the wire (`/api/evidence/:id` serves any of them in full on demand) — the transport is
+trimmed, never what the agent can see.
 
 ```
 GET /api/state              -> { incidents, evidence, installs, emergingRisks, lastSweep, services }
