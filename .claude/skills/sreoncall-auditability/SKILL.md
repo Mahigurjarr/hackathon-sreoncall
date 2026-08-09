@@ -1,6 +1,6 @@
 ---
 name: sreoncall-auditability
-description: The evidence-ledger citation contract and the citation-REPAIR mechanism — every [E#] a model cites must resolve to a real recorded query, and an invented one now gets one real repair attempt (Ledger.repair) before it ships, not just a console.warn while it passes through unchanged. Use this skill whenever touching src/evidence/ledger.js, whenever adding a new place a model's text gets stored (an RCA, a PR body, a decline reason, a verdict), and whenever someone asks to improve auditability, evidence integrity, or citation checking. Read it before adding a fourth call site that validates citations without repairing them — that regresses exactly the gap this skill exists to close.
+description: The evidence-ledger citation contract, the citation-REPAIR mechanism (every [E#] a model cites must resolve to a real recorded query, and an invented one gets one real repair attempt before it ships), AND the grounding check (groundedIn) that catches a hallucinated SERVICE NAME in triage's output before it can spawn a real investigation for something that doesn't exist. Use this skill whenever touching src/evidence/ledger.js or src/sentinel/triage.js, whenever adding a new place a model's text gets stored (an RCA, a PR body, a decline reason, a verdict) or a new place a model names an entity from a fixed real list, and whenever someone asks to reduce hallucination or improve auditability/evidence integrity. Read it before adding a fourth citation call site that skips repair, and before trusting a model-named entity without checking it against the real list it was supposedly drawn from.
 ---
 
 # Auditability
@@ -79,6 +79,32 @@ the synchronous store callback.
   automatic inside `validate()`. Keep that separation: a caller that only wants to *check*
   should never accidentally trigger a network call.
 
+## Grounding — the same discipline, applied one step earlier
+
+Citation repair catches a hallucination in a claim's PROOF (an invented `[E#]`). It can't catch
+a hallucination in the claim's SUBJECT — a service name that doesn't exist at all. `triage.js`
+is where that risk is highest: it reasons over a numeric frame and names services in prose,
+with nothing (before this) checking that the name it used was a real one.
+
+`groundedIn(frame, items, label)` (`src/sentinel/triage.js`) is the deterministic fix: every
+`anomaly` and `emergingRisk` triage returns is checked against `frame.perService`'s real
+service list — the actual fleet `frame.js` built the numbers from, not a name the model typed.
+A name that doesn't match gets dropped, **logged as a hallucination** (`console.warn`), and
+never reaches `sweepOnce()`'s fan-out. This matters more than a repair-style second chance
+would here: a hallucinated service name spawning a real investigation and a real incident is a
+categorically worse failure than an uncited claim, since it would fabricate work about
+something that doesn't exist rather than merely fail to prove something that does.
+
+**Why this is a membership check, not a repair loop**: asking the model to "fix" a hallucinated
+service name (e.g., "did you mean `checkout`?") would be guessing at intent over a fabrication
+— there's no correct repair for a name that was never real. Dropping it and logging why is the
+honest response; the next sweep gets a fresh, hopefully non-hallucinated attempt regardless.
+
+Verified standalone, no model call needed for the check itself: 4 cases (a real service kept, a
+fabricated one dropped, a mixed list correctly split, an empty list) — see
+`sreoncall-detection-rca` for how this composes with the concurrent fan-out that consumes
+triage's (now grounded) output.
+
 ## Before you touch this subsystem
 
 - [ ] Every new place a model's cited text gets stored calls `ledger.repair()` before storing it
@@ -88,6 +114,12 @@ the synchronous store callback.
 - [ ] No repair call happens inside a synchronous `store.update()` callback
 - [ ] `repair()` never invents a new evidence id — only cites existing ones or removes the claim
 - [ ] `raw` responses in the ledger are still never altered by a repair pass
+- [ ] `groundedIn` still checks against the REAL service list a frame was built from, not a
+      hardcoded or cached one that could drift from the fleet
+- [ ] A dropped hallucination still logs a warning — silently discarding it would hide the
+      fact that a hallucination happened at all
+- [ ] Grounding still drops the item outright rather than attempting a repair — there is no
+      correct guess for a fabricated entity name
 
 ## Related
 
@@ -96,3 +128,8 @@ the synchronous store callback.
   deterministic code quietly patching over what it produced
 - [[sreoncall-ownership]] — the PR body and decline reason this skill repairs
 - [[sreoncall-memory]] — the redemption verdict this skill repairs, which can close an incident
+- [[sreoncall-agency]] — the grounded output of triage this skill protects is exactly what
+  feeds the concurrent fan-out and the recurring-risk escalation that skill covers
+- [[sreoncall-alerting]] — the structural rationale gate on authored alert rules is the same
+  "check in code, don't just ask nicely in the prompt" instinct as `groundedIn`, applied to a
+  different self-report

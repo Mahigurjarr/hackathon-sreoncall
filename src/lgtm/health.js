@@ -97,8 +97,15 @@ async function probeFleet() {
 
 /**
  * Reachability of each backend the agent depends on for its senses, plus the fleet probe.
- * Used by the dashboard's own status line: if Mimir is down, the agent is blind, and the UI
- * must say so rather than showing a quiet all-clear.
+ * Used by the dashboard's own status line: if any ONE of these is down, the agent is partially
+ * blind, and the UI must say so rather than showing a quiet all-clear.
+ *
+ * All three, not just Mimir: an investigation reasons over metrics, logs, AND traces
+ * (investigator/tools.js's query_logs and its trace-search tools need Loki and Tempo,
+ * respectively). A health check that only verifies Mimir would report "ok" while the agent's
+ * ability to read logs or traces — a real third of its senses — was silently broken. That is
+ * exactly the kind of blind spot this file's own header comment exists to prevent; leaving
+ * Loki and Tempo unchecked here was the same mistake in miniature.
  */
 async function probeStack() {
   const checks = {};

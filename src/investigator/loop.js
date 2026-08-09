@@ -150,6 +150,31 @@ function systemPrompt() {
 
 const HYPOTHESIS_RE = /HYPOTHESIS\[(NEW|CONFIRMED|REVISED|DISCONFIRMED)\]\s*:\s*(.+)/gi;
 
+// ---- Completion gate --------------------------------------------------------------------
+// "Always read the logs too" (sre-as-code/practices/incident-response.md) was, until this,
+// entirely a prompt request — nothing checked whether the model actually did before letting
+// it finalize. This is the structural version: after the model volunteers a final answer,
+// code (not another prompt) checks which evidence KINDS it actually used, and if a whole
+// signal class is untouched, the model gets one more real, tool-enabled turn to either use it
+// or explicitly justify why it doesn't apply — never a silent skip.
+const REQUIRED_SIGNAL_KINDS = ["metric", "log", "trace"];
+const COMPLETION_GATE_TURNS = 3;
+
+// Which evidence KINDS this investigation's own tool calls actually produced — derived from
+// the ledger entries this run created, not from re-reading prose (a model could claim to have
+// checked logs without a matching tool call ever having run).
+function signalKindsUsed(steps, ledger) {
+  const kinds = new Set();
+  for (const step of steps) {
+    for (const r of step.results || []) {
+      const id = r.result?.id;
+      const entry = id && ledger.get(id);
+      if (entry) kinds.add(entry.kind);
+    }
+  }
+  return kinds;
+}
+
 function parseHypotheses(text, turn) {
   if (!text) return [];
   return [...String(text).matchAll(HYPOTHESIS_RE)].map((m) => ({
@@ -276,16 +301,66 @@ async function investigate({ trigger, frame = null, ledger = null, state = null,
   });
 
   let final_rca = loopResult.text;
+  let allSteps = loopResult.steps;
+  let finalMessages = loopResult.messages;
+  let exhausted = Boolean(loopResult.exhausted);
 
-  // Either maxTurns ran out mid tool-call, or the model closed a turn with no text for some
-  // other reason. Force one more turn with no `tools` passed — it structurally cannot make
-  // another tool call — rather than shipping an empty RCA.
-  if (loopResult.exhausted || !final_rca || !final_rca.trim()) {
+  // The completion gate: only when the model stopped on its own (not out of budget) and
+  // actually produced an answer — an already-exhausted run has no turns left to spend on this,
+  // and gets the existing forced-final-turn treatment below instead.
+  const signalCoverage = { kinds: [...signalKindsUsed(allSteps, activeLedger)], gateInvoked: false, gateOutcome: null };
+  if (!exhausted && final_rca && final_rca.trim()) {
+    const missingKinds = REQUIRED_SIGNAL_KINDS.filter((k) => !signalCoverage.kinds.includes(k));
+    if (missingKinds.length) {
+      signalCoverage.gateInvoked = true;
+      const gateResult = await runToolLoop({
+        model,
+        system,
+        messages: [
+          ...finalMessages,
+          {
+            role: "user",
+            content:
+              `Before finalizing: this investigation has not used ${missingKinds.join(" or ")} ` +
+              "evidence yet. Either query it now if it could plausibly bear on this incident, " +
+              "or state explicitly why it doesn't apply (some services in this fleet genuinely " +
+              "emit no logs at all — that is a documented fact, not every gap is a real one). " +
+              "Do not silently skip this — say which and why, then give your final answer again " +
+              "in the required format.",
+          },
+        ],
+        tools: toolDefs,
+        handlers,
+        maxTurns: COMPLETION_GATE_TURNS,
+        onStep,
+      });
+
+      allSteps = [...allSteps, ...gateResult.steps];
+      finalMessages = gateResult.messages;
+      exhausted = Boolean(gateResult.exhausted); // the gate's own budget, not the main loop's
+
+      if (gateResult.text && gateResult.text.trim()) {
+        final_rca = gateResult.text;
+        hypothesis_history.push(...parseHypotheses(final_rca, allSteps.length));
+      }
+
+      signalCoverage.kinds = [...signalKindsUsed(allSteps, activeLedger)];
+      const stillMissing = REQUIRED_SIGNAL_KINDS.filter((k) => !signalCoverage.kinds.includes(k));
+      signalCoverage.gateOutcome = stillMissing.length
+        ? `still missing after the gate: ${stillMissing.join(", ")}`
+        : "covered after the gate";
+    }
+  }
+
+  // Either maxTurns ran out mid tool-call (main loop or the completion gate), or the model
+  // closed a turn with no text for some other reason. Force one more turn with no `tools`
+  // passed — it structurally cannot make another tool call — rather than shipping an empty RCA.
+  if (exhausted || !final_rca || !final_rca.trim()) {
     const forced = await chat({
       model,
       system,
       messages: [
-        ...loopResult.messages,
+        ...finalMessages,
         {
           role: "user",
           content:
@@ -297,7 +372,7 @@ async function investigate({ trigger, frame = null, ledger = null, state = null,
       ],
     });
     final_rca = forced.text || final_rca || "";
-    hypothesis_history.push(...parseHypotheses(final_rca, loopResult.steps.length));
+    hypothesis_history.push(...parseHypotheses(final_rca, allSteps.length));
   }
 
   let { unresolved } = activeLedger.validate(final_rca);
@@ -321,14 +396,18 @@ async function investigate({ trigger, frame = null, ledger = null, state = null,
     final_rca,
     citedEvidence: cited.filter((id) => !unresolved.includes(id)),
     unresolvedCitations: unresolved,
-    turns: loopResult.steps.length,
-    exhausted: Boolean(loopResult.exhausted),
+    turns: allSteps.length,
+    exhausted,
+    // Which evidence kinds this RCA actually drew on, and whether the completion gate had to
+    // step in — stored so "did this RCA check logs too" is an answerable, auditable question
+    // on every incident, not something a reviewer has to infer from reading the whole trail.
+    signalCoverage,
   };
 }
 
 module.exports = {
   investigate, buildHandlers, shapeToolResult, parseHypotheses, buildInitialMessage,
-  SYSTEM_PROMPT, systemPrompt,
+  signalKindsUsed, REQUIRED_SIGNAL_KINDS, SYSTEM_PROMPT, systemPrompt,
 };
 
 // ---- CLI harness ----------------------------------------------------------------------------

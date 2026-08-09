@@ -1,6 +1,6 @@
 ---
 name: sreoncall-agency
-description: What makes the agent act like an experienced, cautious SRE engineer rather than a script that hits a threshold and fires — unprompted detection, hypothesis-driven investigation that tries to disprove itself rather than randomly retrying, a real postmortem-then-redemption cycle, and initiative that stops exactly at the one external write step a human gates. Use this skill whenever touching src/sentinel/daemon.js, whenever changing how or when the agent acts on its own, whenever someone asks to strengthen "agency" or autonomy, and whenever tempted to add a human trigger to something the agent could reasonably decide for itself. Read it before adding a new "click to run" button — that is very often agency moving the wrong direction.
+description: What makes the agent act like an experienced, cautious SRE engineer rather than a script that hits a threshold and fires — unprompted detection, hypothesis-driven investigation that tries to disprove itself rather than randomly retrying, escalating a RECURRING pattern into a real investigation on its own initiative (escalatedRisks), a real postmortem-then-redemption cycle, and initiative that stops exactly at the one external write step a human gates. Use this skill whenever touching src/sentinel/daemon.js, whenever changing how or when the agent acts on its own, whenever someone asks to strengthen "agency", "more output", or autonomy, and whenever tempted to add a human trigger to something the agent could reasonably decide for itself. Read it before adding a new "click to run" button — that is very often agency moving the wrong direction — and before changing the escalation dedup logic, which prevents one service from getting two concurrent investigations in the same sweep.
 ---
 
 # Agency
@@ -49,9 +49,43 @@ engineer who:
    re-verifying whatever came due against fresh evidence (`src/actions/redemption.js`).
 7. **Learns from what it finds** — an `unresolved` check blocks the same fix from being
    reused blindly next time (`sreoncall-memory`'s reuse guard).
+8. **Notices patterns too quiet for one sweep alone** — a recurring `emergingRisk` graduates
+   into a full investigation on its own initiative once it crosses a real recurrence bar; see
+   below.
 
 No step above has a "click here to run this" button. The only human-facing surface in the
 whole loop is a review gate on step 4's *external* half — see below.
+
+## Escalating a pattern, not just a reading — more output backed by real signal
+
+Triage produces two kinds of finding: an `anomaly` (worth a full investigation now) and an
+`emergingRisk` (trouble forming, not yet worth the budget). Until now, an emerging risk was
+purely a write-only log — noted, displayed, and never revisited. A pattern that kept recurring
+sweep after sweep got noted every single time and acted on never, which is a form of the same
+mistake as "collecting evidence without ever citing it": the signal existed, and nothing used
+it.
+
+`escalatedRisks()` (`daemon.js`) fixes this without inventing busywork (guardrail #5 still
+applies): a specific `(service, riskType)` pattern noted `RISK_ESCALATION_COUNT` (3) or more
+times within `RISK_ESCALATION_WINDOW_MS` (30 minutes) graduates into a real investigation,
+fanned into the SAME sweep's concurrent batch as fresh anomalies — not a separate, delayed
+pass. This is "more output" in the sense that matters: more investigations opened from real,
+accumulated evidence, not more noise generated to look busy.
+
+**Why this is a tuning constant and not a hallucination risk or a hardcoded threshold**: the
+count governs *escalation policy* — how persistent a pattern must be before it earns its own
+budget — never *what counts as anomalous in the first place*. That judgement is still triage's,
+made fresh every single sweep with no fixed cutoff on the underlying numbers. See
+`sreoncall-alerting`'s "tuning constants are not thresholds" section for the general version of
+this distinction.
+
+**Deduplication matters here in a way it didn't before**: a service triage flags as BOTH a
+fresh anomaly and (via its history) a newly-escalated risk in the same sweep must not fan out
+into two concurrent investigations for one service — `hasOpenIncidentFor`'s single pre-fan-out
+snapshot can't catch that race, since both branches check against incidents that exist before
+either finishes. `sweepOnce()` dedupes the combined list by service before the fan-out runs,
+fresh anomalies taking priority. Verified standalone: 4 cases (no overlap, overlap resolved to
+one investigation, a triage-internal duplicate, the empty case), all passing.
 
 ## Postmortem, then redemption — the part that makes this agency, not automation
 
@@ -119,6 +153,13 @@ narrowing what requires review — never by having the agent approve its own dra
       unconditionally, success or not
 - [ ] The approval gate before an external write is still intact — agency grows by narrowing
       what needs review with evidence, never by removing the review
+- [ ] `escalatedRisks` still counts against a real recency window, not the entire history —
+      a pattern that recurred three times over a year is not the same signal as three times in
+      thirty minutes
+- [ ] A service escalated this sweep still can't ALSO fan out as a fresh anomaly — the
+      service-level dedup before the fan-out still runs
+- [ ] The escalation count is still a tuning constant governing persistence, never a business
+      threshold on what counts as anomalous — that stays triage's live judgement
 
 ## Related
 

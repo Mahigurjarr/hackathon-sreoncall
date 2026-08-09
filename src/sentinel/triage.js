@@ -44,6 +44,27 @@ function extractJson(text) {
   }
 }
 
+// The grounding check: a hallucinated service name is the cheapest, most damaging kind of
+// fabrication triage could produce — it would spawn a real investigation, and a real
+// incident, for a service that was never in the frame it was handed at all. This is a
+// deterministic membership check against the REAL service list the frame was built from
+// (frame.perService), not a judgement about the world — it can only ever reject a name,
+// never invent or approve a claim about a service's actual state. Every dropped entry is
+// logged, never silently discarded, so a hallucination is a visible event, not a non-event.
+function groundedIn(frame, items, label) {
+  const realServices = new Set((frame?.perService || []).map((s) => s.service));
+  const grounded = [];
+  for (const item of items) {
+    if (realServices.has(item.service)) {
+      grounded.push(item);
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn(`triage(): dropped a hallucinated ${label} for service "${item.service}" — not in the real frame`);
+    }
+  }
+  return grounded;
+}
+
 async function triage(frame) {
   const res = await chat({
     model: MODELS.fast,
@@ -52,11 +73,10 @@ async function triage(frame) {
   });
 
   const parsed = extractJson(res.text);
-  return {
-    anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
-    emergingRisks: Array.isArray(parsed.emergingRisks) ? parsed.emergingRisks : [],
-    raw: res.text,
-  };
+  const anomalies = groundedIn(frame, Array.isArray(parsed.anomalies) ? parsed.anomalies : [], "anomaly");
+  const emergingRisks = groundedIn(frame, Array.isArray(parsed.emergingRisks) ? parsed.emergingRisks : [], "emerging risk");
+
+  return { anomalies, emergingRisks, raw: res.text };
 }
 
-module.exports = { triage, SYSTEM_PROMPT };
+module.exports = { triage, groundedIn, SYSTEM_PROMPT };

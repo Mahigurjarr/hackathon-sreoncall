@@ -20,6 +20,7 @@ const { reviseRemediation } = require("../actions/remediation");
 const { loadedPractices, PRACTICES_DIR, DOCS } = require("../practices");
 const { probeStack, assessHealth } = require("../lgtm/health");
 const { askCopilot } = require("../copilot/assistant");
+const { extractLesson } = require("../memory/lessons");
 
 const PORT = Number(process.env.SRE_WEB_PORT) || 8420;
 const DIST_DIR = path.join(__dirname, "..", "..", "web", "dist");
@@ -118,6 +119,19 @@ async function handleProposalAction(req, res, id, action) {
         p.rejectionReason = body.reason || "(no reason given)";
       }
     });
+
+    // The broader self-learning loop: a rejection may reveal a general lesson that should
+    // change every FUTURE incident's handling, not just this one (src/memory/lessons.js). This
+    // runs after the rejection is already persisted and never blocks the response on it — a
+    // slow or failed lesson extraction must not make a successful rejection look like it failed.
+    extractLesson(proposal, body.reason, { action: "rejected" })
+      .then((result) => {
+        if (result.recorded) {
+          console.log(`[lessons] recorded from ${id} (rejected): ${result.lesson}`);
+        }
+      })
+      .catch(() => {}); // extractLesson already catches internally; this is belt-and-braces
+
     return sendJson(res, 200, { ok: true, status: "rejected" });
   }
 
@@ -130,6 +144,20 @@ async function handleProposalAction(req, res, id, action) {
     }
     try {
       const revised = await reviseRemediation(proposal, String(body.feedback));
+
+      // The same broader self-learning loop as reject, fired from the other trigger a human
+      // correction can come from. A push-back is often the richer signal — the objection AND
+      // the agent's revised response are both visible — so it gets judged too, not just an
+      // outright rejection. Fire-and-forget for the same reason: the revision already
+      // succeeded and is already returned to the caller regardless of what this finds.
+      extractLesson(proposal, String(body.feedback), { action: "pushed back on" })
+        .then((result) => {
+          if (result.recorded) {
+            console.log(`[lessons] recorded from ${id} (push-back): ${result.lesson}`);
+          }
+        })
+        .catch(() => {});
+
       return sendJson(res, 200, { ok: true, proposal: revised });
     } catch (err) {
       return sendJson(res, 502, { error: `revision failed: ${err.message}` });

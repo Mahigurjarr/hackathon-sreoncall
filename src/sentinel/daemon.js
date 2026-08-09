@@ -74,6 +74,44 @@ function hasOpenIncidentFor(state, service) {
   return state.incidents.some((inc) => inc.service === service && !TERMINAL_STATUSES.has(inc.status));
 }
 
+// A tuning constant, not a business threshold — sreoncall-alerting's own distinction applies
+// here too. This governs how many times a PATTERN must recur before it earns its own
+// investigation; it says nothing about what counts as anomalous in the first place, which
+// stays triage's live judgement, made fresh every sweep with no fixed cutoff.
+const RISK_ESCALATION_COUNT = 3;
+const RISK_ESCALATION_WINDOW_MS = 30 * 60 * 1000;
+
+// An emerging risk noted once is background chatter — triage already decided it wasn't worth
+// a full investigation yet. The SAME (service, riskType) pattern noted several times inside a
+// real window is a trend the agent should stop merely logging and start investigating on its
+// own initiative: this is what agency means for a signal too quiet for any single sweep to
+// act on alone, but too persistent to keep silently re-noting sweep after sweep.
+//
+// Pure function — `allEmergingRisks` is the full, already-updated history (including this
+// sweep's own new entries); `newlyNoted` is just this sweep's additions, so escalation is
+// judged once per genuinely new risk, not re-fired every sweep for a pattern already acted on.
+function escalatedRisks(allEmergingRisks, newlyNoted) {
+  const now = Date.now();
+  const recentCounts = new Map();
+  for (const r of allEmergingRisks || []) {
+    if (now - new Date(r.notedAt).getTime() > RISK_ESCALATION_WINDOW_MS) continue;
+    const key = `${r.service}|${r.riskType}`;
+    recentCounts.set(key, (recentCounts.get(key) || 0) + 1);
+  }
+
+  const escalated = [];
+  const seenKeys = new Set();
+  for (const r of newlyNoted || []) {
+    const key = `${r.service}|${r.riskType}`;
+    if (seenKeys.has(key)) continue; // dedup within this sweep's own new risks
+    if ((recentCounts.get(key) || 0) >= RISK_ESCALATION_COUNT) {
+      escalated.push(r);
+      seenKeys.add(key);
+    }
+  }
+  return escalated;
+}
+
 // Records what the remediation author decided onto the incident itself, so the dashboard can
 // show "the agent has a fix ready" without re-deriving it from the proposals list.
 function recordRemediationOutcome(incidentId, outcome) {
@@ -220,6 +258,10 @@ async function openIncidentFromInvestigation(service, trigger, frame, detectedAt
     })),
     steps: [],
     unresolvedCitations: result.unresolvedCitations,
+    // Which evidence kinds (metric/log/trace) this RCA actually drew on, and whether the
+    // completion gate had to intervene before it was allowed to finalize — the structural
+    // version of "always check the logs too" (investigator/loop.js's REQUIRED_SIGNAL_KINDS).
+    signalCoverage: result.signalCoverage,
     // Kept on the incident so the dashboard can show that this one cost a verification pass
     // rather than a full investigation, and which prior incident taught it that.
     memory: {
@@ -242,6 +284,17 @@ async function openIncidentFromInvestigation(service, trigger, frame, detectedAt
 }
 
 async function sweepOnce() {
+  // Liveness, set first and unconditionally: "the daemon reached this iteration," independent
+  // of whether anything downstream succeeds. This was a real bug — it used to be set only
+  // after triage() returned, and triage() throws by design when the LLM is unavailable
+  // (sreoncall-ai-native-gate: detection must fail loud, never fake a result). During a real
+  // outage, that meant lastSweep went stale and docker-compose.yml's own healthcheck reported
+  // a daemon that was alive, looping, and correctly failing loud as UNHEALTHY — conflating
+  // "the loop is running" with "the loop's last attempt succeeded". What actually failed is
+  // already visible in this sweep's own error logs; lastSweep only ever needs to answer "is
+  // the process still iterating," and now it does regardless of what fails below.
+  store.update((s) => { s.lastSweep = new Date().toISOString(); });
+
   const sweepLedger = new Ledger();
   // Collection is deliberately independent from model reasoning. Metrics, traces, backend
   // reachability, and per-service health all land in state BEFORE triage calls the LLM. If the
@@ -282,31 +335,73 @@ async function sweepOnce() {
   const summary = await explainFleet({ health, incidents: state.incidents });
   if (summary) store.update((s) => { s.fleetSummary = summary; });
 
-  // A detection EVENT is recorded the instant triage flags a service — independent of whether
-  // an incident ever results (a duplicate this sweep, a failed investigation). This is the
-  // honest evented-style record a single "incident opened" timestamp can't give you: signal
-  // arrived, here, now, whether or not anything downstream succeeds. Bounded so a long-running
-  // daemon doesn't grow this file forever.
+  // Emerging risks are recorded BEFORE the fan-out below (not after, as before) — escalation
+  // has to count against the fully up-to-date history, including this sweep's own new
+  // entries, and an escalated risk needs to be available to join the SAME sweep's fan-out
+  // rather than waiting a full extra interval to be acted on.
+  let riskState = state;
+  if (decision.emergingRisks.length) {
+    riskState = store.update((s) => {
+      s.emergingRisks = s.emergingRisks || [];
+      for (const risk of decision.emergingRisks) {
+        s.emergingRisks.push({ ...risk, notedAt: new Date().toISOString() });
+      }
+    });
+  }
+
+  // Agency, exercised on a signal too quiet for any one sweep to act on alone: a risk noted
+  // repeatedly for the same (service, riskType) inside a real window graduates from "logged"
+  // to "investigated", entirely on the agent's own initiative — nobody has to notice the
+  // pattern and manually open an incident for it. See escalatedRisks' own comment for why the
+  // threshold is a tuning constant, not a business one.
+  const escalated = escalatedRisks(riskState.emergingRisks, decision.emergingRisks).map((r) => ({
+    service: r.service,
+    reason: `A recurring pattern ("${r.riskType}") was noted ${RISK_ESCALATION_COUNT}+ times in the last ${RISK_ESCALATION_WINDOW_MS / 60000} minutes: ${r.reason}`,
+  }));
+  if (escalated.length) {
+    console.log(`[sentinel] escalating ${escalated.length} recurring risk(s) to a full investigation: ${escalated.map((e) => e.service).join(", ")}`);
+  }
+
+  // Deduped by service, fresh anomalies taking priority over escalated risks for the same
+  // service — the fan-out below opens at most one investigation per service per sweep. Without
+  // this, two sources both naming the same service (triage flagging it fresh AND its own
+  // history crossing the escalation threshold in the same sweep, or triage's own output
+  // repeating a service) would fan out two CONCURRENT investigations for one service — a race
+  // hasOpenIncidentFor's single pre-fan-out snapshot cannot catch, since both branches check
+  // against incidents that exist before either one finishes.
+  const seenServices = new Set();
+  const allAnomalies = [...decision.anomalies, ...escalated].filter((a) => {
+    if (seenServices.has(a.service)) return false;
+    seenServices.add(a.service);
+    return true;
+  });
+
+  // A detection EVENT is recorded the instant something is flagged for investigation — whether
+  // a fresh single-sweep anomaly or an escalated recurring risk — independent of whether an
+  // incident ever results (a duplicate this sweep, a failed investigation). This is the honest
+  // evented-style record a single "incident opened" timestamp can't give you: signal arrived,
+  // here, now, whether or not anything downstream succeeds. Bounded so a long-running daemon
+  // doesn't grow this file forever.
   const detectedAt = new Date().toISOString();
-  if (decision.anomalies.length) {
+  if (allAnomalies.length) {
     store.update((s) => {
       s.detections = s.detections || [];
-      for (const anomaly of decision.anomalies) {
+      for (const anomaly of allAnomalies) {
         s.detections.push({ at: detectedAt, service: anomaly.service, reason: anomaly.reason });
       }
       if (s.detections.length > 500) s.detections = s.detections.slice(-500);
     });
   }
 
-  // Each anomaly is an independent unit of work — investigated concurrently, not one at a
-  // time. Safe because store.js's cross-process lock already serializes the actual writes;
-  // what used to be a blocking serial loop is now a real fan-out, which is both faster (one
-  // sweep's total time is the slowest single investigation, not their sum) and the honest
-  // shape of "several signals arrived at once", closer to how an evented pipeline would
-  // actually process them. Never lets one anomaly's failure reject the whole batch — each
-  // settles independently, tagged with which anomaly it was.
+  // Each item is an independent unit of work — investigated concurrently, not one at a time.
+  // Safe because store.js's cross-process lock already serializes the actual writes; what used
+  // to be a blocking serial loop is now a real fan-out, which is both faster (one sweep's
+  // total time is the slowest single investigation, not their sum) and the honest shape of
+  // "several signals arrived at once", closer to how an evented pipeline would actually
+  // process them. Never lets one item's failure reject the whole batch — each settles
+  // independently, tagged with which one it was.
   const results = await Promise.all(
-    decision.anomalies
+    allAnomalies
       .filter((anomaly) => !hasOpenIncidentFor(state, anomaly.service)) // already tracking this one
       .map(async (anomaly) => {
         const trigger = `Fleet sweep flagged ${anomaly.service} as anomalous: ${anomaly.reason}`;
@@ -334,15 +429,6 @@ async function sweepOnce() {
     }
   }
 
-  if (decision.emergingRisks.length) {
-    store.update((s) => {
-      s.emergingRisks = s.emergingRisks || [];
-      for (const risk of decision.emergingRisks) {
-        s.emergingRisks.push({ ...risk, notedAt: new Date().toISOString() });
-      }
-    });
-  }
-
   // Closing the loop on incidents opened by earlier sweeps: re-verify whatever came due, so
   // "applied"/"declined" can become "confirmed resolved" (or, just as importantly, surface as
   // "didn't hold") with fresh cited evidence rather than sitting as an unchecked claim forever.
@@ -354,7 +440,7 @@ async function sweepOnce() {
     if (s.telemetry) s.telemetry.lastAnalyzedAt = completedAt;
   });
 
-  return { ...decision, opened, failed, redemptions };
+  return { ...decision, escalatedCount: escalated.length, opened, failed, redemptions };
 }
 
 async function runDaemon({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
@@ -397,7 +483,10 @@ async function runDaemon({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
       const redeemedSuffix = decision.redemptions.length
         ? `, ${decision.redemptions.length} redemption check(s) run (${decision.redemptions.filter((x) => x.recovered).length} recovered)`
         : "";
-      console.log(`[sentinel] sweep complete: ${n} anomal${n === 1 ? "y" : "ies"}, ${r} emerging risk(s), ${decision.opened.length} incident(s) opened${failedSuffix}${redeemedSuffix}`);
+      const escalatedSuffix = decision.escalatedCount
+        ? `, ${decision.escalatedCount} recurring risk(s) escalated to investigation`
+        : "";
+      console.log(`[sentinel] sweep complete: ${n} anomal${n === 1 ? "y" : "ies"}, ${r} emerging risk(s), ${decision.opened.length} incident(s) opened${escalatedSuffix}${failedSuffix}${redeemedSuffix}`);
     } catch (err) {
       const failedAt = new Date().toISOString();
       store.update((s) => {
@@ -419,6 +508,7 @@ async function runDaemon({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
 module.exports = {
   sweepOnce, runDaemon, openIncidentFromInvestigation, attachRemediation,
   deriveConfidence, extractHeadline, extractResolutionSteps, hasOpenIncidentFor, errorRecord,
+  escalatedRisks, RISK_ESCALATION_COUNT, RISK_ESCALATION_WINDOW_MS,
 };
 
 if (require.main === module) {

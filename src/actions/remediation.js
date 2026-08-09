@@ -20,7 +20,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { runDecisionLoop, MODELS } = require("../llm/client");
+const { chat, runDecisionLoop, MODELS } = require("../llm/client");
 const { Ledger } = require("../evidence/ledger");
 const { practicesBlock } = require("../practices");
 const { draftProposal } = require("./proposals");
@@ -324,6 +324,7 @@ async function draftRemediation(incident, { ledger = null, model = MODELS.deep }
   }
 
   const body = await repairCitations(`draftRemediation(${incident.id})`, activeLedger, call.args.body);
+  const repairedFiles = await repairAlertRuleRationales(`draftRemediation(${incident.id})`, activeLedger, files);
 
   const slug = String(branchSlug || "fix").replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   const branchName = `agent/${incident.id.toLowerCase()}-${slug}`.slice(0, 200);
@@ -337,7 +338,7 @@ async function draftRemediation(incident, { ledger = null, model = MODELS.deep }
       branchName,
       title,
       body,
-      files: files.map((f) => ({
+      files: repairedFiles.map((f) => ({
         path: f.path,
         content: f.content,
         message: f.message || `${title} (${incident.id})`,
@@ -359,6 +360,82 @@ async function repairCitations(label, ledger, text) {
     console.warn(`${label}: unresolved citations survived repair: ${result.stillUnresolved.join(", ")}`);
   }
   return result.text;
+}
+
+// The alerting equivalent of the citation-repair gate above — makes guardrails.md §7 ("no
+// number in a rule without a citation behind it") a structural check on what actually got
+// authored, not just a line in the prompt asking nicely. This is the concrete difference
+// between "the model was told not to hardcode a threshold" and "code verified it didn't."
+const ALERT_RULE_PATH_RE = /^sre-as-code\/alert-rules\/.*\.ya?ml$/i;
+
+// "rationale:" existing is necessary but not sufficient — a rationale-shaped paragraph with no
+// real evidence behind it reads exactly like a properly cited one to anyone skimming the YAML.
+// Requires BOTH the key and at least one citation that actually resolves.
+function alertRuleNeedsRationaleRepair(file, ledger) {
+  if (!ALERT_RULE_PATH_RE.test(file.path)) return false;
+  if (!/^rationale:/m.test(file.content)) return true;
+  const { cited, unresolved } = ledger.validate(file.content);
+  const hasRealCitation = cited.some((id) => !unresolved.includes(id));
+  return !hasRealCitation;
+}
+
+// One bounded repair attempt, same shape as Ledger.repair(): show the model exactly what's
+// missing and every real evidence id available, ask for the corrected FULL file content, and
+// re-check the result in code afterward rather than trusting the rewrite blindly.
+async function repairAlertRuleRationale(file, ledger, model) {
+  const validIds = ledger.all().map((e) => `${e.id}: ${e.summary}`);
+  const prompt = [
+    "This alert-rule file is missing a properly cited rationale — either no `rationale:` " +
+      "block at all, or one with no real [E#] evidence id behind it " +
+      "(guardrails.md §7: no number in a rule without a citation behind it).",
+    "",
+    `File: ${file.path}`,
+    "",
+    "Current content:",
+    file.content,
+    "",
+    "Evidence ids that actually exist (id: summary):",
+    validIds.length ? validIds.join("\n") : "(none)",
+    "",
+    "Rewrite the ENTIRE file content, adding or fixing the `rationale:` block so it explains " +
+      "the signal choice and cites at least one real evidence id above. Preserve the existing " +
+      "YAML structure and the query itself unless the rationale genuinely requires a change. " +
+      "Never invent an evidence id. Return ONLY the corrected file content, nothing else.",
+  ].join("\n");
+
+  try {
+    const reply = await chat({ model, messages: [{ role: "user", content: prompt }] });
+    const repaired = (reply.text || "").trim();
+    return repaired || file.content;
+  } catch {
+    // A failed repair call is not a reason to lose the file — ship the original, still flagged
+    // by the re-check below, exactly like Ledger.repair()'s own network-failure fallback.
+    return file.content;
+  }
+}
+
+// Runs the rationale gate over every proposed file. Non-alert-rule files pass through
+// untouched. A flagged file gets one repair attempt and is re-checked afterward — if it still
+// fails, it ships as-is with a warning, the same tolerance repairCitations uses: a human
+// reviewing the PR is the backstop an automated repair couldn't replace, not an unbounded
+// retry loop here.
+async function repairAlertRuleRationales(label, ledger, files, { model = MODELS.fast } = {}) {
+  const result = [];
+  for (const file of files) {
+    if (!alertRuleNeedsRationaleRepair(file, ledger)) {
+      result.push(file);
+      continue;
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const repairedContent = await repairAlertRuleRationale(file, ledger, model);
+    const repairedFile = { ...file, content: repairedContent };
+    if (alertRuleNeedsRationaleRepair(repairedFile, ledger)) {
+      // eslint-disable-next-line no-console
+      console.warn(`${label}: ${file.path} still has no cited rationale after repair`);
+    }
+    result.push(repairedFile);
+  }
+  return result;
 }
 
 /**
@@ -429,6 +506,10 @@ async function reviseRemediation(proposal, feedback, { model = MODELS.deep } = {
     call.name === "propose_fix"
       ? await repairCitations(`reviseRemediation(${proposal.id})`, ledger, call.args.body)
       : null;
+  const repairedFiles =
+    call.name === "propose_fix"
+      ? await repairAlertRuleRationales(`reviseRemediation(${proposal.id})`, ledger, call.args.files || [])
+      : null;
 
   const { update } = require("../store/state");
   let updated;
@@ -460,7 +541,7 @@ async function reviseRemediation(proposal, feedback, { model = MODELS.deep } = {
         ...p.payload,
         title,
         body: repairedBody,
-        files: (files || []).map((f) => ({
+        files: (repairedFiles || files || []).map((f) => ({
           path: f.path,
           content: f.content,
           message: f.message || `${title} (${incidentId})`,
@@ -476,5 +557,5 @@ async function reviseRemediation(proposal, feedback, { model = MODELS.deep } = {
 
 module.exports = {
   draftRemediation, reviseRemediation, readSreAsCodeInventory, citedEvidenceFor,
-  isAllowedPath, ALLOWED_PREFIXES,
+  isAllowedPath, ALLOWED_PREFIXES, alertRuleNeedsRationaleRepair, ALERT_RULE_PATH_RE,
 };

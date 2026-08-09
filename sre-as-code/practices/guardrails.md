@@ -97,7 +97,35 @@ When a rule needs a real number, derive it from real history (`derive_baseline`)
 call that produced it. See `sre-as-code/practices/incident-response.md`'s alerting section and
 the `sreoncall-alerting` skill for the full discipline.
 
-## 8. Verification is not an exception to guardrail 1
+## 8. A diagnosis must cover more than one signal type before it can finalize
+
+Metrics, logs, and traces each surface a different half-truth on their own — a metric shows
+*that* something changed, a trace shows *where*, a log line usually names *what the system
+itself thinks went wrong*. An RCA built from only one of the three is not automatically wrong,
+but it has not earned the right to skip the others without saying why.
+
+This is enforced in code, not left to a prompt request alone: `investigator/loop.js` checks
+which evidence kinds an investigation actually used before letting it finalize, and if a whole
+signal class was never touched, the investigation gets one more real turn to either use it or
+state plainly why it doesn't apply (some services in this fleet genuinely emit no logs at all
+— that is a documented fact, not a gap to force). Every incident records which signal types it
+actually drew on (`signalCoverage`) so this is a checkable fact, not a claim.
+
+## 9. Learned lessons are practice, not suggestion
+
+When a human rejects a proposal, that rejection is judged for a durable, general lesson — not
+"redo this one fix differently," but "does this reveal something that should change how every
+future incident like it gets handled." A genuine lesson is appended to
+`sre-as-code/practices/learned-lessons.md` (`src/memory/lessons.js`), which is loaded into
+every future reasoning step exactly like this file is. Treat an entry there with the same
+weight as anything in `incident-response.md`: it is accumulated practice, earned from a real
+human correction, not a suggestion to weigh against convenience.
+
+A well-argued decision NOT to record a lesson is the common, correct outcome for a one-off
+rejection — manufacturing a general rule from a single disagreement would pollute a file every
+future incident gets reasoned against, which is worse than recording nothing.
+
+## 10. Verification is not an exception to guardrail 1
 
 Checking whether a fix held, or whether a decline was right, is still read-only. A redemption
 check uses the same GET-only tools an investigation uses — nothing about "closing the loop"

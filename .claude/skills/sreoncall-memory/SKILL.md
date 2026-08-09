@@ -1,6 +1,6 @@
 ---
 name: sreoncall-memory
-description: The agent's self-learning loop — how it recalls previously diagnosed incidents, decides reuse vs related vs novel by MECHANISM rather than service name, spends a 4-turn verification instead of a 12-turn search on a recurrence, reuses an existing fix rather than authoring a duplicate PR, and — the redemption loop — comes back later to check whether a reused or fresh fix actually held, feeding that outcome back so a fix that failed stops being trusted. Use this skill whenever touching src/memory/ or src/actions/redemption.js, whenever changing how investigations are triggered or budgeted, whenever adding caching/dedup/"don't repeat work" behaviour, whenever incident.memory or incident.redemption are involved, and whenever someone asks the agent to stop wasting tokens on repeated problems or to learn from what worked. Read it before changing the recall or redemption path, because a wrong reuse is far more expensive than a missed one, and a false "confirmed" closes an incident that is still live.
+description: The agent's self-learning loop, at two scopes — PER-INCIDENT (recall decides reuse vs related vs novel by MECHANISM, redemption checks later whether a fix actually held) and CROSS-INCIDENT (src/memory/lessons.js turns a human's correction — an outright rejection OR a push-back/revise — into a durable, general lesson appended to sre-as-code/practices/learned-lessons.md, loaded into every future prompt, with a size guard warning when that file grows large). Use whenever touching src/memory/, src/actions/redemption.js, or learned-lessons.md, whenever changing how investigations are triggered or budgeted, and whenever someone asks the agent to stop wasting tokens on repeated problems or to learn from a human's correction beyond one incident. Read it before changing recall/redemption (a wrong reuse costs far more than a missed one) and before changing lessons.js (a manufactured lesson pollutes every future prompt).
 ---
 
 # Memory / self-learning
@@ -150,6 +150,72 @@ not a learning loop.
 `derive_baseline`). Verifying a fix is not a special case of guardrail #1 — it is another
 ordinary application of it. Nothing about "closing the loop" implies write access to anything.
 
+## The lessons loop — self-learning that outlives one incident
+
+Recall and redemption are both scoped to a single incident and its direct recurrences. What
+was missing — the gap a rubric pass explicitly called out as unimproved — is a loop where a
+human's correction changes the agent's behaviour on incidents that have **nothing else in
+common** with the one that was corrected. `src/memory/lessons.js` is that loop.
+
+**Two triggers, one judgement**: `src/web/server.js` calls `extractLesson(proposal, reason,
+{ action })` from both review outcomes a human can produce —
+
+- the **reject** handler, after every outright rejection (`action: "rejected"`);
+- the **revise** handler, after every push-back (`action: "pushed back on"`) — fired only once
+  `reviseRemediation()` has already succeeded, so a lesson is never extracted from a revision
+  that itself failed.
+
+Both calls are fired-and-forgotten: neither can block or fail the HTTP response, since the
+reject/revise action is already persisted regardless of whether a broader lesson can be drawn
+from it. `action` only changes how the prompt frames what happened (`buildUserMessage`) and
+how the recorded entry is labelled — it does **not** relax the judgement's conservatism for
+push-backs. That matters because a push-back is often the *richer* signal of the two: the
+human's objection AND the agent's revised attempt are both visible, so the model can judge not
+just what was wrong but whether the reasoning pattern is likely to recur — but it's also the
+easier one to over-mine, since most revisions are just the agent successfully self-correcting
+in the moment and reveal nothing that needs to change beyond that one incident. `no_lesson`
+stays the default outcome for both trigger types.
+
+**The judgement**: the model decides whether this ONE rejection reveals a GENERAL principle —
+"don't propose an alert rule when confidence is medium or below without saying so in the
+rationale" is a lesson; "the human just disagreed with this specific call" is not. This mirrors
+`recall()`'s own conservatism: a manufactured lesson from a single data point is worse than no
+lesson, because the file it lands in is read by every future incident, not just similar ones.
+**`no_lesson` is the common, correct outcome** — most single rejections don't reveal a systemic
+gap, and treating "record something" as the default would turn a curated practice file into
+noise.
+
+**Where it lands**: `sre-as-code/practices/learned-lessons.md`, appended (never overwritten),
+registered in `src/practices.js`'s `DOCS` array between `incident-response.md` and
+`guardrails.md`. This is what makes it "wider behaviour retuning" rather than another
+incident-scoped memory: `practices.js` loads it into the investigator's prompt, the
+remediation author's prompt, AND redemption's prompt — every reasoning step, on every future
+incident, whether or not recall judges it related to whatever triggered the lesson.
+
+**Why plain `fs.appendFileSync`, not the state lock**: this path is human-paced — a rejection
+happens at most a few times per session, never in a hot loop — so `store.js`'s cross-process
+lock (built for concurrent incident/evidence writes at sweep frequency) would be unjustified
+machinery here. If lessons are ever written from more than one process concurrently, revisit
+this; until then, matching the write frequency to the mechanism's weight is the right call, not
+reflexively reusing the heaviest available primitive.
+
+**The file is meant to be human-curated, not just machine-appended.** Like every other practice
+doc, a human can open `learned-lessons.md` and edit or prune it directly — a lesson recorded
+automatically is a draft earning its place through use, not untouchable history.
+
+**The size guard — a warning, never a prune.** A file loaded into every future prompt that
+grows forever eventually degrades every future prompt, not just this one. After every append,
+`appendLesson()` checks the file's byte size against `SIZE_WARNING_BYTES` (8000 — roughly
+30-40 entries at this format's size) and logs a `console.warn` if it's over. That's the entire
+mechanism: no entry is ever dropped, reordered, or summarised away automatically. Deleting a
+human's accumulated practice without asking is a worse failure mode than a slightly-too-long
+file, so the response to growth is a visible nudge for a human curation pass — the same
+`console.warn`-only pattern this codebase already uses for other visible-not-silent signals
+(`groundedIn`'s dropped-hallucination warning in `sreoncall-auditability` is the closest
+analogue). If this file is ever seen growing unchecked in practice, the fix is a human pruning
+session or a summarisation pass a human triggers deliberately — never an automatic prune added
+to `appendLesson()` itself.
+
 ## What gets recorded, and why it's visible
 
 Every incident carries a `memory` field and, once a remediation outcome lands, a `redemption`
@@ -177,7 +243,7 @@ bug that skipped the work.
 | `VERIFY_TURNS` (reuse) | `daemon.js` | 4 | Enough to confirm a known hypothesis with live queries; not enough to drift into an open-ended search |
 | `VERIFY_TURNS` (redemption) | `redemption.js` | 5 | Same idea, applied to "did it recover" instead of "is the diagnosis still true" |
 | `SRE_REDEMPTION_DELAY_MS` | `redemption.js` | 900000 (15m), env-overridable | Long enough for a merged PR or a flag flip to take effect and for fresh telemetry to accumulate |
-| recall / redemption model | both | `MODELS.fast` | Cheap calls gating potentially expensive ones. Using the deep model here would erase the saving |
+| recall / redemption / lessons model | all three | `MODELS.fast` | Cheap calls gating potentially expensive ones (or, for lessons, judging a rare event that doesn't need the deep model's cost) |
 
 These are engineering tuning knobs, not business thresholds — see `sreoncall-alerting`'s
 "Tuning constants are not thresholds" section for the distinction and why it matters here too.
@@ -198,6 +264,20 @@ these first.
 - [ ] `confirmed` still requires non-low confidence before closing an incident
 - [ ] An `unresolved` prior fix still blocks the reuse shortcut and still gets surfaced to recall's prompt
 - [ ] `verifyRecovery()` still uses only GET-only tools — never a write path
+- [ ] `extractLesson()` still defaults to `no_lesson` for a one-off disagreement — recording
+      is the exception, not the default, and push-backs are judged just as conservatively as
+      outright rejections despite being the richer signal
+- [ ] A recorded lesson still appends to `learned-lessons.md` — never overwrites or truncates
+      the file
+- [ ] `learned-lessons.md` stays registered in `practices.js`'s `DOCS`, between
+      `incident-response.md` and `guardrails.md`
+- [ ] Lesson extraction still fires after the reject/revise action is already persisted or
+      already succeeded, and its own failure still can't turn a successful reject/revise into
+      an error response
+- [ ] The revise trigger still fires only after `reviseRemediation()` succeeds — never from a
+      revision that itself failed
+- [ ] The size guard still only warns (`console.warn`) — it must never auto-prune, truncate,
+      or summarise `learned-lessons.md` on its own
 
 ## Related
 
@@ -205,5 +285,9 @@ these first.
   and how redemption is what lets ownership close an incident rather than stop at "PR opened"
 - [[sreoncall-alerting]] — `derive_baseline`, the same real-history tool redemption prefers
   over a bare current reading when judging recovery
-- `sre-as-code/practices/incident-response.md` — "Reuse before re-investigation" and
-  "Verification", the team-editable statement of this policy loaded into both prompts
+- [[sreoncall-detection-rca]] — the completion gate is the same "don't trust a self-report,
+  check it structurally" instinct as this skill's redemption/lessons mechanisms, applied to
+  signal coverage during diagnosis instead of outcomes after it
+- `sre-as-code/practices/incident-response.md` and `guardrails.md` §9 — "Reuse before
+  re-investigation", "Verification", and "Learned lessons are practice, not suggestion" — the
+  team-editable statement of this policy loaded into every prompt

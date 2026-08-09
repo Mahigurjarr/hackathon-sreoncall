@@ -1,6 +1,6 @@
 ---
 name: sreoncall-alerting
-description: SRE best practices for authoring alert rules and interpreting readings against them — symptom-based signals, the four golden signals, absent-safe queries, and deriving every comparison from real historical data (derive_baseline) instead of a hardcoded number. Use this skill whenever writing or reviewing anything in sre-as-code/alert-rules/*.yaml, whenever a PromQL/LogQL/TraceQL query needs a "is this anomalous?" judgement, whenever the word "threshold" comes up, and whenever tempted to write a literal numeric cutoff into a rule, a prompt, or a practice doc. Read it before writing an alert rule, not after — this is the discipline that keeps every rule in this repo generic and portable across fleets.
+description: SRE best practices for authoring alert rules and interpreting readings against them — symptom-based signals, the four golden signals, absent-safe queries, deriving every comparison from real historical data (derive_baseline) instead of a hardcoded number, AND the structural rationale gate (alertRuleNeedsRationaleRepair) that checks in code — not just in the prompt — that every authored rule actually has a cited rationale before it ships in a real PR. Use this skill whenever writing or reviewing anything in sre-as-code/alert-rules/*.yaml, whenever touching remediation.js's file-authoring path, whenever a PromQL/LogQL/TraceQL query needs a "is this anomalous?" judgement, whenever the word "threshold" comes up, and whenever tempted to write a literal numeric cutoff into a rule, a prompt, or a practice doc. Read it before writing an alert rule, not after — this is the discipline that keeps every rule in this repo generic, portable, and structurally verified rather than merely requested.
 ---
 
 # Alerting
@@ -94,6 +94,43 @@ history rather than fabricating a baseline from nothing (`ok: false` when the ra
 returns no matrix data) — treat that as "too soon to derive a baseline," never as license to
 fall back to an invented number.
 
+## The rationale gate — a structural check, not a prompt request
+
+Everything above was, until now, entirely a prompt request: the remediation author was ASKED
+to cite real evidence in a rule's rationale, with nothing verifying it actually did. That is
+exactly the same gap `sreoncall-detection-rca`'s completion gate closes for RCAs, applied here
+to authored alert rules.
+
+`src/actions/remediation.js`'s `alertRuleNeedsRationaleRepair(file, ledger)` checks, in code,
+every file a proposal touches under `sre-as-code/alert-rules/*.yaml`:
+
+1. Does it have a `rationale:` key at all?
+2. If so, does that rationale contain at least one `[E#]` citation that actually **resolves**
+   against the real ledger — not just a citation-shaped bracket, a real one?
+
+A file failing either check gets **one bounded repair attempt**
+(`repairAlertRuleRationale`): the model is shown the flagged file, every real evidence id
+available, and asked to rewrite the full file with a properly cited rationale — the same
+"show it what's missing, re-check in code afterward, never trust the rewrite blindly" shape as
+`Ledger.repair()`. A file that still fails after one attempt ships as-is with a `console.warn`
+— the PR review a human already does is the backstop an automated repair couldn't replace, not
+grounds for an unbounded retry loop here.
+
+**This is wired into the real path, not a side check**: `draftRemediation()` and
+`reviseRemediation()` both run every proposed file through this gate, and the REPAIRED content
+— not the original — is what lands in `proposal.payload.files`, which is exactly what
+`applyGithubPrProposal`/`openFixPR` uses as the literal PR file content on approval. A rule
+that gets repaired here is repaired in the actual PR a human reviews, not just in an
+intermediate check nobody sees the effect of.
+
+**Verified without live model credits** (this was built while the shared API key was
+exhausted): the detection half — `alertRuleNeedsRationaleRepair` — is pure logic over a ledger
+and a string, and was unit-tested standalone against five cases (missing key, fake citation,
+real citation, non-alert-rule file, each behaving correctly). The repair CALL itself needs the
+model and gets exercised the same way `Ledger.repair()`'s network path does: on failure, it
+returns the original content unchanged, still flagged by the re-check — fail open, never lose
+the file.
+
 ## Avoiding alert fatigue
 
 - Prefer a **duration/hold** condition (sustained over a window) to a single-sample spike,
@@ -140,11 +177,23 @@ Current tuning constants in this codebase, kept here so a change is a one-place 
 - [ ] No bare literal threshold anywhere in the PromQL or the rationale
 - [ ] Rate and ratio both considered, or the choice of one alone is justified
 - [ ] A noisy existing rule gets a more precise signal, never a suppressed one
+- [ ] `alertRuleNeedsRationaleRepair` still checks REAL citation resolution, not just the
+      presence of a `rationale:` key or a citation-shaped bracket
+- [ ] The repaired file content, not the original, still flows into
+      `proposal.payload.files` — repairing a check that has no effect on the real PR is
+      security theatre, not a gate
+- [ ] The repair attempt is still bounded to one try per file, with a warning (not a thrown
+      error) if it still fails afterward
 
 ## Related
 
 - [[sreoncall-memory]] — recall also treats "this alert rule already covers that mechanism" as
   a candidate signal when judging reuse vs. novel
-- [[sreoncall-ownership]] — the path from a derived baseline to an actual PR
-- `sre-as-code/practices/incident-response.md` — the live-judgement-over-baseline principle
-  this skill's mechanism section implements in code
+- [[sreoncall-detection-rca]] — the completion gate is the identical "structural check, one
+  repair attempt, never trust the self-report" shape applied to RCA signal coverage instead of
+  alert-rule rationales
+- [[sreoncall-ownership]] — the path from a derived baseline to an actual PR; the rationale
+  gate is what makes guardrail #7 (no number without a citation) checkable in code rather than
+  only stated in a prompt
+- `sre-as-code/practices/incident-response.md` and `guardrails.md` §7 — the
+  live-judgement-over-baseline principle this skill's mechanism section implements in code

@@ -20,9 +20,12 @@ const path = require("node:path");
 const PRACTICES_DIR = path.join(__dirname, "..", "sre-as-code", "practices");
 
 // Order matters: guardrails last, so the hard limits are the final thing in the prompt
-// rather than something earlier text can appear to soften.
+// rather than something earlier text can appear to soften. learned-lessons sits between the
+// two — it's practice guidance like incident-response.md, just accumulated from real human
+// corrections (src/memory/lessons.js) instead of authored up front.
 const DOCS = [
   { file: "incident-response.md", title: "Incident response practice (team-authored)" },
+  { file: "learned-lessons.md", title: "Learned lessons (accumulated from human corrections)" },
   { file: "guardrails.md", title: "Guardrails — hard limits, not guidance" },
 ];
 
