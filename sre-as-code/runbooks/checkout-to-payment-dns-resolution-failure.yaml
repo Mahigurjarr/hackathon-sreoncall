@@ -1,0 +1,33 @@
+title: Checkout → Payment DNS resolution failures
+service: checkout
+trigger_description: >
+  Checkout’s error rate/ratio is judged anomalous and error traces show DNS A-record lookup
+  failures on the client call to PaymentService (grpc UNAVAILABLE with a message like
+  "dns: A record lookup error: lookup badAddress on 127.0.0.11:53"), while payment shows no
+  server-side handling or ERROR logs.
+steps:
+  - Pull both error rate and error ratio for checkout over the last 5m
+    (traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR"} vs. the same query as a
+    ratio) — low-QPS faults show up in ratio, high-QPS ones in rate; collect both per
+    docs/TELEMETRY.md trap #2.
+  - Run compare_baseline against the same query offset 1h to understand if this is a step
+    change vs. background noise.
+  - Search Tempo with `{status=error && resource.service.name="checkout"}
+    | select(event.exception.message, span.name)` and look for DNS lookup text like
+    "dns: A record lookup error" and identify whether the failing client span is
+    `oteldemo.PaymentService/Charge`.
+  - Cross-check dependency reachability:
+    • Search Tempo for `service.name=payment` over the same window and verify whether server spans are absent for the failing calls.
+    • Cross-check Loki `{service_name="opentelemetry-demo/payment", level="ERROR"}` for payment-side error logs over the window.
+  - If the evidence matches the DNS-failure pattern (checkout errors with DNS lookup text,
+    absent payment server spans, and no payment ERROR logs), validate DNS resolution and
+    the resolver path from a checkout pod:
+    • From a checkout pod, resolve the PaymentService hostname (e.g., `payment`) using nslookup/dig; record resolver IPs from /etc/resolv.conf and confirm whether 127.0.0.11 is in use.
+    • Check CoreDNS/kube-dns (and any node-local DNS cache) health and logs; if unhealthy, restart/remediate the DNS layer according to platform SOPs.
+  - After remediation, re-run a checkout flow and collect fresh traces to confirm:
+    • PaymentService server spans are present for the call, and
+    • The prior exception text ("lookup badAddress…") is absent from checkout traces.
+  - If DNS appears healthy but resolution still fails from checkout pods, capture a short
+    tcpdump or resolver logs from a failing pod and compare resolver configuration
+    (/etc/resolv.conf, nsswitch) with a healthy pod; escalate to the platform/DNS owners
+    with the captured evidence and example trace IDs.
