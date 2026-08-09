@@ -1,0 +1,30 @@
+title: Load-generator span-metrics error slice missing
+service: load-generator
+trigger_description: >
+  The agent observes that load-generator has a present span-metrics total-call series while
+  the error-status slice is absent, and Tempo traces show error spans — a mismatch judged
+  anomalous against baseline (not a fixed threshold breach).
+steps:
+  - Pull total-call rate for load-generator over 5m to verify the series exists (as in [E415]):
+    sum by (service_name) (rate(traces_span_metrics_calls_total{service_name="load-generator"}[5m]))
+  - Pull error-status rate for load-generator over 5m, absent-safe (note absent ≠ zero as in [E407]):
+    sum by (service_name) (rate(traces_span_metrics_calls_total{service_name="load-generator", status_code="STATUS_CODE_ERROR"}[5m]))
+      or (sum by (service_name) (rate(traces_span_metrics_calls_total{service_name="load-generator"}[5m])) * 0)
+  - Search Tempo for recent error traces involving load-generator to confirm spans carry status=ERROR and exception events (see [E412]):
+    {status=error && resource.service.name="load-generator"}
+  - Open a concrete trace to validate the call path and error details (e.g., ed62681e94c476fa0f7c2a5c897357fa in [E414]).
+  - Compare across services whether error-status series exist to check if this is isolated (as in [E413]):
+    sum by (service_name) (rate(traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR"}[5m]))
+      or (sum by (service_name) (rate(traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR"}[5m])) * 0)
+  - Validate label/attribute mapping for load-generator:
+    Confirm resource.service.name in traces matches the service_name label in metrics;
+    review any collector/aggregation rules that map status_code or filter labels for this service.
+  - If a traced exception names a feature flag (e.g., "Product Catalog Fail Feature Flag Enabled" in [E414]):
+    Record it in the RCA and coordinate a flag adjustment if unintended; this is an operator action, not a code change.
+  - Remediate the metrics gap:
+    Inspect span→metric aggregation for filters or mapping bugs that could drop STATUS_CODE_ERROR for load-generator only.
+    After correction, generate a controlled error trace and validate that
+    traces_span_metrics_calls_total{service_name="load-generator", status_code="STATUS_CODE_ERROR"}
+    produces a non-empty series within one collection window, re-running the above queries ([E412], [E407], [E415]).
+  - Close-out check:
+    Attach before/after readings of the four queries above to the incident and note restoration.
