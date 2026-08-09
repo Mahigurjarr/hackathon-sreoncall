@@ -1,0 +1,23 @@
+name: load-generator-spanmetrics-error-slice-missing
+service: load-generator
+signal:
+  type: promql
+  # Surface the specific mismatch seen in INC-10: total-call series exists for load-generator
+  # while the error-status slice is absent. The left side yields 1 when total>0; the right
+  # side yields a vector only when the error slice is absent. Together, a non-empty result
+  # here means “total present AND error-slice absent” — a cue to corroborate with traces.
+  query: >
+    (
+      sum by (service_name) (rate(traces_span_metrics_calls_total{service_name="load-generator"}[5m])) > 0
+    )
+    and on ()
+    absent(sum by (service_name) (rate(traces_span_metrics_calls_total{service_name="load-generator", status_code="STATUS_CODE_ERROR"}[5m])))
+rationale: >
+  traces_span_metrics_calls_total covers every service in this fleet, including load-generator.
+  In INC-10, Tempo contained real error spans for load-generator ([E412], [E414]) while the
+  span-metrics error-status series for that service was missing ([E407]) despite a present
+  total-call series ([E415]). Other services did expose the error slice ([E413]), pointing to
+  a service-specific span→metric mapping gap. This rule focuses attention on exactly that
+  mismatch. There is no threshold by design: the agent must corroborate the non-empty result
+  here against Tempo (error traces present) before concluding it is anomalous, since an absent
+  error-series can be benign when a service truly has zero errors.
